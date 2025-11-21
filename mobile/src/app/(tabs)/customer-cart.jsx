@@ -20,29 +20,26 @@ import {
   Roboto_400Regular,
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
+import { createOrder } from '../../api/api'; // ✅ added import
 
 export default function CustomerCartScreen() {
   const router = useRouter();
-  const { cart, removeFromCart, increaseQuantity, decreaseQuantity } =
-    useCart();
+  const { cart, removeFromCart, increaseQuantity, decreaseQuantity } = useCart();
 
   const [selectedTime, setSelectedTime] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [orderType, setOrderType] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
   const pickupTimes = ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM'];
 
   // Proceed to show modal
   const handleProceed = () => {
     if (!selectedTime) {
-      Alert.alert(
-        'Pickup Time Required',
-        'Please select a pickup time before proceeding.'
-      );
+      Alert.alert('Pickup Time Required', 'Please select a pickup time before proceeding.');
       return;
     }
     if (cart.length === 0) {
@@ -52,18 +49,31 @@ export default function CustomerCartScreen() {
     setShowModal(true);
   };
 
-  // Navigate to payment page with full order details
-  const goToPayment = (type) => {
-    router.push({
-      pathname: '/cart/payment',
-      params: {
-        orderType: type,
-        total: total,
-        selectedTime: selectedTime,
-        cartItems: JSON.stringify(cart), // pass entire cart as JSON
-      },
-    });
-    setShowModal(false);
+  // ✅ Create order and go to payment
+  const goToPayment = async (type) => {
+    try {
+      setLoading(true);
+      const res = await createOrder(type, total, selectedTime, cart);
+      setLoading(false);
+
+      if (res.success) {
+        setShowModal(false);
+        router.push({
+          pathname: '/cart/payment',
+          params: {
+            orderType: type,
+            total: total,
+            selectedTime: selectedTime,
+            orderId: res.order_id, // ✅ backend order ID
+          },
+        });
+      } else {
+        Alert.alert('Order Error', res.error || 'Failed to create order.');
+      }
+    } catch (error) {
+      setLoading(false);
+      Alert.alert('Error', 'Something went wrong while creating your order.');
+    }
   };
 
   const renderItem = ({ item }) => (
@@ -73,25 +83,16 @@ export default function CustomerCartScreen() {
         <Text style={styles.name}>{item.name}</Text>
         <Text style={styles.price}>₱{item.price}</Text>
         <View style={styles.controls}>
-          <TouchableOpacity
-            onPress={() => decreaseQuantity(item.id)}
-            style={styles.controlBtn}
-          >
+          <TouchableOpacity onPress={() => decreaseQuantity(item.id)} style={styles.controlBtn}>
             <Ionicons name="remove" size={18} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.qty}>{item.quantity}</Text>
-          <TouchableOpacity
-            onPress={() => increaseQuantity(item.id)}
-            style={styles.controlBtn}
-          >
+          <TouchableOpacity onPress={() => increaseQuantity(item.id)} style={styles.controlBtn}>
             <Ionicons name="add" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
-      <TouchableOpacity
-        onPress={() => removeFromCart(item.id)}
-        style={styles.trashBtn}
-      >
+      <TouchableOpacity onPress={() => removeFromCart(item.id)} style={styles.trashBtn}>
         <Ionicons name="trash-outline" size={22} color="#f97316" />
       </TouchableOpacity>
     </View>
@@ -102,6 +103,7 @@ export default function CustomerCartScreen() {
       <TouchableOpacity style={styles.addMoreBtn} onPress={() => router.back()}>
         <Text style={styles.addMoreText}>+ Add more items</Text>
       </TouchableOpacity>
+
       <View style={styles.pickupContainer}>
         <Text style={styles.pickupLabel}>Select Pickup Time:</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -117,10 +119,7 @@ export default function CustomerCartScreen() {
               <Text
                 style={[
                   styles.pickupTimeText,
-                  selectedTime === time && {
-                    color: '#fff',
-                    fontFamily: 'Roboto_700Bold',
-                  },
+                  selectedTime === time && { color: '#fff', fontFamily: 'Roboto_700Bold' },
                 ]}
               >
                 {time}
@@ -181,58 +180,29 @@ export default function CustomerCartScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Dine-in / Takeout Modal */}
-      <Modal
-        visible={showModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowModal(false)}
-      >
+      {/* Modal for Dine-in / Takeout */}
+      <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={{ alignItems: 'center' }}>
             <View style={styles.circleChoiceContainer}>
-              {/* Dine-in */}
               <TouchableOpacity
                 onPress={() => goToPayment('dinein')}
-                style={[
-                  styles.circleBtn,
-                  orderType === 'dinein' && styles.circleBtnSelected,
-                ]}
+                style={[styles.circleBtn, orderType === 'dinein' && styles.circleBtnSelected]}
               >
-                <Image
-                  source={require('../../../assets/dinein.png')}
-                  style={styles.circleImage}
-                />
-                <Text
-                  style={[
-                    styles.circleText,
-                    orderType === 'dinein' && styles.circleTextSelected,
-                  ]}
-                >
+                <Image source={require('../../../assets/dinein.png')} style={styles.circleImage} />
+                <Text style={[styles.circleText, orderType === 'dinein' && styles.circleTextSelected]}>
                   DINE-IN
                 </Text>
               </TouchableOpacity>
 
               <Text style={styles.orText}>OR</Text>
 
-              {/* Takeout */}
               <TouchableOpacity
                 onPress={() => goToPayment('takeout')}
-                style={[
-                  styles.circleBtn,
-                  orderType === 'takeout' && styles.circleBtnSelected,
-                ]}
+                style={[styles.circleBtn, orderType === 'takeout' && styles.circleBtnSelected]}
               >
-                <Image
-                  source={require('../../../assets/takeout.png')}
-                  style={styles.circleImage}
-                />
-                <Text
-                  style={[
-                    styles.circleText,
-                    orderType === 'takeout' && styles.circleTextSelected,
-                  ]}
-                >
+                <Image source={require('../../../assets/takeout.png')} style={styles.circleImage} />
+                <Text style={[styles.circleText, orderType === 'takeout' && styles.circleTextSelected]}>
                   TAKEOUT
                 </Text>
               </TouchableOpacity>
@@ -240,13 +210,20 @@ export default function CustomerCartScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Loading overlay */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#f97316" />
+          <Text style={{ color: '#fff', marginTop: 8 }}>Creating your order...</Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fdfdfd' },
-
   headerBackground: {
     width: '100%',
     borderBottomLeftRadius: 20,
@@ -254,21 +231,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingBottom: 8,
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(254,192,117,0.5)',
-  },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(254,192,117,0.5)' },
   headerContainer: { paddingTop: 50, paddingBottom: 14, paddingHorizontal: 14 },
-  headerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize: 30,
-    fontFamily: 'Roboto_700Bold',
-    color: 'black',
-  },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { fontSize: 30, fontFamily: 'Roboto_700Bold', color: 'black' },
 
   card: {
     flexDirection: 'row',
@@ -288,35 +254,14 @@ const styles = StyleSheet.create({
   image: { width: 60, height: 60, borderRadius: 10, marginRight: 14 },
   details: { flex: 1 },
   name: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333' },
-  price: {
-    fontSize: 14,
-    fontFamily: 'Roboto_400Regular',
-    color: '#777',
-    marginVertical: 6,
-  },
+  price: { fontSize: 14, fontFamily: 'Roboto_400Regular', color: '#777', marginVertical: 6 },
   controls: { flexDirection: 'row', alignItems: 'center' },
-  controlBtn: {
-    backgroundColor: '#e67e22',
-    padding: 6,
-    borderRadius: 20,
-    marginHorizontal: 6,
-  },
-  qty: {
-    fontSize: 16,
-    fontFamily: 'Roboto_700Bold',
-    color: '#333',
-    minWidth: 20,
-    textAlign: 'center',
-  },
+  controlBtn: { backgroundColor: '#e67e22', padding: 6, borderRadius: 20, marginHorizontal: 6 },
+  qty: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333', minWidth: 20, textAlign: 'center' },
   trashBtn: { padding: 8, borderRadius: 10, backgroundColor: '#fff5eb' },
 
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: {
-    marginTop: 5,
-    fontSize: 18,
-    fontFamily: 'Roboto_400Regular',
-    color: '#999',
-  },
+  emptyText: { marginTop: 5, fontSize: 18, fontFamily: 'Roboto_400Regular', color: '#999' },
 
   addMoreBtn: {
     backgroundColor: '#f97316',
@@ -328,19 +273,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  addMoreText: {
-    fontSize: 16,
-    fontFamily: 'Roboto_700Bold',
-    color: '#fff',
-  },
+  addMoreText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#fff' },
 
   pickupContainer: { paddingHorizontal: 12, marginVertical: 10 },
-  pickupLabel: {
-    fontSize: 16,
-    fontFamily: 'Roboto_700Bold',
-    color: '#333',
-    marginBottom: 6,
-  },
+  pickupLabel: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333', marginBottom: 6 },
   pickupTimeBtn: {
     borderWidth: 1,
     borderColor: '#f97316',
@@ -351,11 +287,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   pickupTimeSelected: { backgroundColor: '#f97316' },
-  pickupTimeText: {
-    fontSize: 14,
-    fontFamily: 'Roboto_400Regular',
-    color: '#333',
-  },
+  pickupTimeText: { fontSize: 14, fontFamily: 'Roboto_400Regular', color: '#333' },
 
   proceedBtn: {
     position: 'absolute',
@@ -369,11 +301,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 4,
   },
-  proceedText: {
-    color: '#fff',
-    fontFamily: 'Roboto_700Bold',
-    fontSize: 16,
-  },
+  proceedText: { color: '#fff', fontFamily: 'Roboto_700Bold', fontSize: 16 },
 
   modalOverlay: {
     flex: 1,
@@ -399,30 +327,16 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: 'black',
   },
-  circleBtnSelected: {
-    borderColor: '#f97316',
-    backgroundColor: '#fff7f2',
-  },
-  circleImage: {
-    width: 80,
-    height: 80,
-    resizeMode: 'contain',
-    marginBottom: 3,
-    transform: [{ scale: 1.1 }],
-  },
-  circleText: {
-    fontSize: 14,
-    fontFamily: 'Roboto_700Bold',
-    color: '#333',
-  },
-  circleTextSelected: {
-    color: '#f97316',
-  },
-  orText: {
-    fontSize: 24,
-    fontFamily: 'Roboto_700Bold',
-    color: 'white',
-    marginHorizontal: 3,
-    alignSelf: 'center',
+  circleBtnSelected: { borderColor: '#f97316', backgroundColor: '#fff7f2' },
+  circleImage: { width: 80, height: 80, resizeMode: 'contain', marginBottom: 3, transform: [{ scale: 1.1 }] },
+  circleText: { fontSize: 14, fontFamily: 'Roboto_700Bold', color: '#333' },
+  circleTextSelected: { color: '#f97316' },
+  orText: { fontSize: 24, fontFamily: 'Roboto_700Bold', color: 'white', marginHorizontal: 3, alignSelf: 'center' },
+
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

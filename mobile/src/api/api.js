@@ -10,6 +10,8 @@ export const REFRESH_TOKEN_KEY = '@sanaol/auth/refreshToken';
 export const USER_CACHE_KEY = '@sanaol/auth/user';
 
 // Separate base URLs
+export const BASE_URL_ORDERS = `${BASE_URL}/orders`; // ✅ added
+
 export const BASE_URLFEEDBACK = `http://192.168.1.6:8000`;
 export const BASE_URL = `http://192.168.1.6:8000/api`; // main API
 export const BASE_URL_MENU = `http://192.168.1.6:8000/menu`; // menu endpoints
@@ -226,30 +228,6 @@ export const removeCartItem = async (itemId) => {
 };
 
 // --------------------
-// 🌟 Menu Notification Checker
-// --------------------
-export const checkNewMenuNotifications = async () => {
-  try {
-    const storedLastCount = await AsyncStorage.getItem('lastMenuCount');
-    const menuItems = await fetchMenuItems();
-    const newCount = menuItems.length;
-
-    if (storedLastCount && parseInt(storedLastCount) < newCount) {
-      sendLocalNotification('🆕 New Menu Item Added', 'Check out the latest addition to the menu!');
-    }
-
-    await AsyncStorage.setItem('lastMenuCount', newCount.toString());
-  } catch (error) {
-    console.error('❌ Notification check error:', error.message);
-  }
-};
-
-// Example of showing a local notification (replace later with expo-notifications)
-const sendLocalNotification = (title, body) => {
-  console.log(`🔔 Notification: ${title} - ${body}`);
-};
-
-// --------------------
 // Global interceptor for logging
 // --------------------
 api.interceptors.response.use(
@@ -259,5 +237,71 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+export const fetchOrderStatus = async (orderId) => {
+  try {
+    const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+    const response = await axios.get(
+      `${BASE_URL_ORDERS}/orders/${orderId}/status/`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      }
+    );
+    return response.data.status_index; // 0, 1, 2, 3...
+  } catch (error) {
+    console.error("Fetch order status error:", error.response?.data || error);
+    throw error;
+  }
+};
+export const getGcashLink = async (orderId, total) => {
+  try {
+    const res = await axios.post(`${API_URL}${orderId}/gcash_link/`, { total });
+    return res.data;
+  } catch (err) {
+    console.error('Error fetching GCash link:', err);
+    throw err;
+  }
+};
+
+// ✅ Confirm payment
+export const confirmPayment = async (orderId, method) => {
+  try {
+    const res = await axios.post(`${API_URL}${orderId}/confirm_payment/`, { method });
+    return res.data;
+  } catch (err) {
+    console.error('Error confirming payment:', err);
+    throw err;
+  }
+};
+export const createOrder = async (type, total, pickup_time, items) => {
+  const token = await AsyncStorage.getItem('access_token');
+  const headers = token
+    ? { Authorization: `Bearer ${token}` }
+    : {}; // no header if not logged in
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/create_order/`,
+      { type, total, pickup_time, items },
+      { headers }
+    );
+    return res.data;
+  } catch (err) {
+    console.error('Create order error:', err.response?.data || err.message);
+    throw err;
+  }
+};
+
+// Get order status
+export const getOrderStatus = async (orderId, token) => {
+  try {
+    const response = await axios.get(`${BASE_URL_ORDERS}/${orderId}/status/`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    return response.data;
+  } catch (error) {
+    console.log('Get order status error:', error.message);
+    throw error;
+  }
+};
 
 export default api;
