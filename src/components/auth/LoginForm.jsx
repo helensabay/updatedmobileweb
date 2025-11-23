@@ -4,7 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 
 const Spinner = () => (
   <svg
-    className="animate-spin -ml-1 mr-3 h-5 w-5"
+    className="animate-spin -ml-1 mr-3 h-4 w-4 sm:h-5 sm:w-5"
     xmlns="http://www.w3.org/2000/svg"
     fill="none"
     viewBox="0 0 24 24"
@@ -58,7 +58,7 @@ const LoginForm = ({
     <>
       {error && (
         <div
-          className="p-3 mb-4 bg-red-50 text-red-700 rounded-md text-sm"
+          className="p-3 sm:p-4 mb-4 bg-red-50 text-red-700 rounded-md text-xs sm:text-sm leading-relaxed"
           role="alert"
           tabIndex={-1}
           ref={alertRef}
@@ -69,7 +69,7 @@ const LoginForm = ({
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-4"
+        className="space-y-4 sm:space-y-5 lg:space-y-6"
         noValidate
         aria-busy={pending || undefined}
       >
@@ -86,7 +86,7 @@ const LoginForm = ({
               value={email}
               onChange={(e) => onEmailChange?.(e.target.value)}
               placeholder=" "
-              className="peer w-full h-10 px-3 pt-3 pb-3 text-sm border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+              className="peer w-full h-12 sm:h-11 lg:h-12 px-3 sm:px-4 pt-3 pb-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all"
               required
               aria-invalid={!!emailError}
               aria-describedby={emailError ? 'email-error' : undefined}
@@ -96,7 +96,7 @@ const LoginForm = ({
             <label
               htmlFor="email"
               className="absolute left-3 text-muted-foreground pointer-events-none transition-all
-                top-0 -translate-y-1/2 text-xs px-1 bg-white
+                top-0 -translate-y-1/2 text-[0.7rem] sm:text-xs px-1 bg-white
                 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:px-0
                 peer-focus:top-0 peer-focus:-translate-y-1/2 peer-focus:text-xs peer-focus:px-1 peer-focus:bg-white"
             >
@@ -104,7 +104,10 @@ const LoginForm = ({
             </label>
           </div>
           {emailError && (
-            <p id="email-error" className="mt-1 text-sm text-red-700">
+            <p
+              id="email-error"
+              className="mt-1 text-xs sm:text-sm text-red-700"
+            >
               {emailError}
             </p>
           )}
@@ -119,7 +122,7 @@ const LoginForm = ({
               value={password}
               onChange={(e) => onPasswordChange?.(e.target.value)}
               placeholder=" "
-              className="peer w-full h-10 px-3 pt-3 pb-3 pr-9 text-sm border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+              className="peer w-full h-12 sm:h-11 lg:h-12 px-3 sm:px-4 pt-3 pb-3 pr-10 sm:pr-12 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all"
               required
               autoComplete="current-password"
               aria-invalid={!!passwordError}
@@ -130,7 +133,7 @@ const LoginForm = ({
             <label
               htmlFor="password"
               className="absolute left-3 text-muted-foreground pointer-events-none transition-all
-                top-0 -translate-y-1/2 text-xs px-1 bg-white
+                top-0 -translate-y-1/2 text-[0.7rem] sm:text-xs px-1 bg-white
                 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:px-0
                 peer-focus:top-0 peer-focus:-translate-y-1/2 peer-focus:text-xs peer-focus:px-1 peer-focus:bg-white"
             >
@@ -139,7 +142,7 @@ const LoginForm = ({
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50 p-2 sm:p-2.5"
               disabled={pending}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
@@ -148,27 +151,32 @@ const LoginForm = ({
           </div>
 
           {passwordError && (
-            <p id="password-error" className="mt-1 text-sm text-red-700">
+            <p
+              id="password-error"
+              className="mt-1 text-xs sm:text-sm text-red-700"
+            >
               {passwordError}
             </p>
           )}
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <label className="inline-flex items-center gap-2">
             <input
               type="checkbox"
-              className="rounded border-gray-300"
+              className="rounded border-gray-300 h-3.5 w-3.5 sm:h-4 sm:w-4"
               checked={!!remember}
               onChange={(e) => onRememberChange?.(e.target.checked)}
               disabled={pending}
             />
-            <span className="text-sm text-gray-700">Remember me</span>
+            <span className="text-xs sm:text-sm text-gray-700">
+              Remember me
+            </span>
           </label>
 
           <button
             type="button"
-            className="text-sm text-primary underline underline-offset-2 disabled:opacity-60"
+            className="text-[0.7rem] sm:text-xs text-primary underline underline-offset-2 disabled:opacity-60"
             onClick={onForgotPassword}
             disabled={pending}
           >
@@ -179,7 +187,7 @@ const LoginForm = ({
         <button
           type="submit"
           disabled={pending}
-          className="w-full bg-primary hover:bg-primary-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-2.5 px-4 rounded-md text-sm transition-colors duration-300 inline-flex items-center justify-center"
+          className="w-full bg-primary hover:bg-primary-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3.5 sm:py-3 md:py-3.5 px-4 rounded-md text-base sm:text-lg transition-colors duration-300 inline-flex items-center justify-center gap-2"
         >
           {pending ? (
             <>

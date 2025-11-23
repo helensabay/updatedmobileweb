@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import logo from '@/assets/technomart-logo.png';
 
 export const NavigationSidebar = () => {
@@ -35,6 +36,7 @@ export const NavigationSidebar = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const activeItemRef = useRef(null);
+  const isMobile = useIsMobile?.() ?? false;
 
   const displayName = user?.name || 'Admin';
   const displayRole = user?.role || 'admin';
@@ -214,7 +216,7 @@ export const NavigationSidebar = () => {
               <SidebarGroupLabel
                 className={cn(
                   'mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-group-label',
-                  isCollapsed && 'sr-only'
+                  isCollapsed && !isMobile && 'sr-only'
                 )}
               >
                 {group.label}
@@ -309,9 +311,10 @@ export const NavigationSidebar = () => {
                 </SidebarMenu>
               </SidebarGroupContent>
 
-              {!isCollapsed && groupIndex < visibleGroups.length - 1 && (
-                <div className="my-3 h-px bg-sidebar-divider" />
-              )}
+              {(!isCollapsed || isMobile) &&
+                groupIndex < visibleGroups.length - 1 && (
+                  <div className="my-3 h-px bg-sidebar-divider" />
+                )}
             </SidebarGroup>
           ))}
         </div>

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -42,6 +41,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import UserManagementCard from './UserManagementCard';
 
 const AUTO_REFRESH_INTERVAL = 20_000;
 
@@ -110,7 +110,7 @@ export const PendingVerifications = () => {
   };
 
   return (
-    <FeaturePanelCard
+    <UserManagementCard
       title="Pending Verifications"
       titleStyle="accent"
       titleIcon={ClipboardList}
@@ -293,7 +293,7 @@ export const PendingVerifications = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </FeaturePanelCard>
+    </UserManagementCard>
   );
 };
 

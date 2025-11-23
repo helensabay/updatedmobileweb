@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { TrendingUp, ShoppingBag, DollarSign, ShieldCheck } from 'lucide-react';
+import {
+  TrendingUp,
+  ShoppingBag,
+  DollarSign,
+  ShieldCheck,
+  Clock3,
+  CalendarRange,
+  CalendarDays,
+} from 'lucide-react';
 import StatsCard from './dashboard/StatsCard';
 import SalesChart from './dashboard/SalesChart';
 import CategoryChart from './dashboard/CategoryChart';
@@ -11,6 +19,7 @@ import ErrorState from '@/components/shared/ErrorState';
 import { useVerificationQueue } from '@/hooks/useVerificationQueue';
 import { useAuth } from '@/components/AuthContext';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 const Dashboard = () => {
   const [timeRange, setTimeRange] = useState('today');
@@ -152,35 +161,72 @@ const Dashboard = () => {
     '30d': 'Last 30 Days',
   };
 
+  const timeRangeOptions = [
+    {
+      value: 'today',
+      label: 'Today',
+      shortLabel: 'Now',
+      icon: Clock3,
+    },
+    {
+      value: '7d',
+      label: 'Last 7 Days',
+      shortLabel: '7d',
+      icon: CalendarRange,
+    },
+    {
+      value: '30d',
+      label: 'Last 30 Days',
+      shortLabel: '30d',
+      icon: CalendarDays,
+    },
+  ];
+
   return (
-    <div className="space-y-6 animate-fade-in p-1">
+    <div className="animate-fade-in container mx-auto w-full max-w-[1440px] space-y-6 px-3 py-4 sm:px-6 sm:py-6 lg:mx-0 lg:max-w-none lg:px-1 lg:py-1">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+      <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6 lg:flex-nowrap lg:items-center lg:gap-0">
+        <div className="max-w-2xl space-y-1 lg:space-y-0">
+          <h1 className="text-[clamp(1.35rem,1.1vw+1.15rem,2rem)] font-bold tracking-tight text-foreground lg:text-3xl">
+            Dashboard
+          </h1>
+          <p className="text-[clamp(0.85rem,1vw,1rem)] leading-relaxed text-muted-foreground lg:mt-1 lg:text-sm">
             Welcome back! Here's what's happening with your canteen.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 border rounded-md p-1">
-            {Object.entries(timeRangeLabels).map(([value, label]) => (
-              <Button
-                key={value}
-                variant={timeRange === value ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setTimeRange(value)}
-                className="h-8"
-              >
-                {label}
-              </Button>
-            ))}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end lg:w-auto lg:gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+            Range
+          </span>
+          <div className="flex w-full items-center gap-1 rounded-md border border-border/60 bg-background/90 p-1 shadow-sm sm:w-auto sm:gap-2 sm:rounded-2xl lg:w-auto lg:gap-1 lg:rounded-md lg:bg-transparent lg:shadow-none">
+            {timeRangeOptions.map(
+              ({ value, label, shortLabel, icon: Icon }) => {
+                const isActive = timeRange === value;
+                return (
+                  <Button
+                    key={value}
+                    variant={isActive ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setTimeRange(value)}
+                    className={cn(
+                      'flex-1 min-h-[40px] items-center gap-1 px-2 text-[11px] font-semibold sm:flex-none sm:gap-2 sm:px-3 sm:text-xs lg:h-8 lg:min-h-0 lg:px-3',
+                      !isActive && 'text-muted-foreground'
+                    )}
+                    aria-label={label}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    <span className="sm:hidden">{shortLabel}</span>
+                    <span className="hidden sm:inline">{label}</span>
+                  </Button>
+                );
+              }
+            )}
           </div>
         </div>
       </div>
 
       {/* Stats Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4 lg:gap-4 lg:grid-cols-4">
         <StatsCard
           title={
             timeRange === 'today'
@@ -253,7 +299,7 @@ const Dashboard = () => {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6 lg:items-stretch">
         <SalesChart
           data={salesTimeData}
           title={
@@ -282,7 +328,7 @@ const Dashboard = () => {
       </div>
 
       {/* Popular Items & Recent Sales */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-6">
         <PopularItems
           itemsToday={stats?.popularItems || []}
           itemsYesterday={stats?.popularItemsYesterday || []}

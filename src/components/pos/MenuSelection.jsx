@@ -25,6 +25,8 @@ const MenuSelection = ({
   setSearchTerm,
   onAddToOrder,
   occupyFullWidth = false,
+  mobileOrderCount = 0,
+  onOpenMobileOrder = null,
 }) => {
   const getFilteredItems = () => {
     if (searchTerm.trim()) {
@@ -75,7 +77,7 @@ const MenuSelection = ({
             handleActivate(event);
           }
         }}
-        className={`group relative h-full min-w-[10.5rem] overflow-hidden border border-border/50 shadow-sm transition-all duration-300 sm:min-w-[11.5rem] ${
+        className={`group relative h-full w-full min-w-0 overflow-hidden border border-border/50 shadow-sm transition-all duration-300 sm:min-w-[11.5rem] ${
           isUnavailable
             ? 'cursor-not-allowed opacity-60'
             : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-xl focus-visible:ring-2 focus-visible:ring-primary/60'
@@ -188,6 +190,29 @@ const MenuSelection = ({
 
   const columnClass = occupyFullWidth ? 'md:col-span-3' : 'md:col-span-2';
 
+  const mobileOrderButton =
+    typeof onOpenMobileOrder === 'function' ? (
+      <button
+        type="button"
+        onClick={onOpenMobileOrder}
+        className="relative inline-flex h-10 w-12 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary transition hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:hidden"
+        aria-label={
+          mobileOrderCount > 0
+            ? `View current order (${mobileOrderCount} item${
+                mobileOrderCount === 1 ? '' : 's'
+              })`
+            : 'View current order'
+        }
+      >
+        <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+        {mobileOrderCount > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 min-h-[1.1rem] min-w-[1.1rem] rounded-full bg-destructive px-1 text-[11px] font-semibold leading-[1.1rem] text-destructive-foreground">
+            {mobileOrderCount > 99 ? '99+' : mobileOrderCount}
+          </span>
+        )}
+      </button>
+    ) : null;
+
   return (
     <div className={`col-span-1 ${columnClass}`}>
       <FeaturePanelCard
@@ -198,15 +223,18 @@ const MenuSelection = ({
         description="Select menu items to add to order"
         headerContent={
           <div className="pt-2">
-            <div className="relative w-full md:w-72">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search menu items..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="flex w-full items-center gap-2">
+              <div className="relative w-full md:w-72">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search menu items..."
+                  className="pl-8"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              {mobileOrderButton}
             </div>
           </div>
         }
@@ -224,7 +252,7 @@ const MenuSelection = ({
               <h3 className="mb-3 text-sm font-medium text-muted-foreground">
                 Search results for "{searchTerm}"
               </h3>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(10.75rem,10.75rem))] justify-center gap-3 sm:gap-3 md:justify-start md:gap-4 lg:gap-5">
+              <div className="grid grid-cols-1 justify-center gap-4 sm:grid-cols-[repeat(auto-fit,minmax(10.75rem,10.75rem))] sm:gap-3 md:justify-start md:gap-4 lg:gap-5">
                 {filteredItems.length > 0 ? (
                   filteredItems.map((item) => (
                     <ItemCard
@@ -276,7 +304,7 @@ const MenuSelection = ({
                   value={category.id}
                   className="flex-1 overflow-y-auto p-0"
                 >
-                  <div className="grid grid-cols-[repeat(auto-fit,minmax(10.75rem,10.75rem))] justify-center gap-3 p-3 sm:gap-3 md:justify-start md:gap-4 lg:gap-5">
+                  <div className="grid grid-cols-1 justify-center gap-4 p-3 sm:grid-cols-[repeat(auto-fit,minmax(10.75rem,10.75rem))] sm:gap-3 md:justify-start md:gap-4 lg:gap-5">
                     {categoryItems.length > 0 ? (
                       categoryItems.map((item) => (
                         <ItemCard

@@ -16,6 +16,23 @@ class PendingUserGateMiddleware:
     """
 
     PUBLIC_PATHS = {
+        "/api/accounts/change-password/",
+        "/api/create_order/",
+        "/api/feedback/",
+        "/orders/user-credit-points/",
+        "/api/feedback/",
+        "/api/notifications/",
+        "/api/create_order/",
+            "/api/orders/confirm_payment/",
+    "/api/orders/<int:order_id>/confirm_payment/",
+    "/api/orders/<str:order_number>/confirm_payment/",
+        "/api/accounts/token/refresh/",
+        "/api/menu",
+        "/api/notifications",
+        "/api/accounts/profile/",
+        "api/menu/menu-items/",
+        "/api/accounts/login/",
+        "/api/accounts/register/",
         "/api/health",
         "/api/auth/login",
         "/api/auth/logout",
@@ -47,6 +64,9 @@ class PendingUserGateMiddleware:
 
     def __call__(self, request):
         path = request.path or ""
+        if path.startswith("/api/orders/"):
+         return self.get_response(request)
+ 
         # Only enforce for API routes
         if path.startswith("/api/"):
             if self._is_public(path):

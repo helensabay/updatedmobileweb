@@ -154,8 +154,13 @@ const FaceRegistrationPage = () => {
   };
 
   const registrationCard = (
-    <AuthCard title="Register Your Face" compact cardClassName="shadow-2xl">
-      <p className="text-sm text-gray-600 mb-6">
+    <AuthCard
+      title="Register Your Face"
+      compact
+      className="!max-w-full sm:!max-w-md lg:!max-w-2xl"
+      cardClassName="shadow-2xl lg:p-8"
+    >
+      <p className="text-xs sm:text-sm text-gray-600 mb-6 leading-relaxed max-w-prose">
         Set up secure face recognition using advanced DeepFace AI for
         passwordless login.
       </p>
@@ -163,7 +168,7 @@ const FaceRegistrationPage = () => {
       {/* Progress indicator */}
       {(step === 'capturing' || step === 'processing') && (
         <div className="space-y-2 mb-6">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-xs sm:text-sm">
             <span className="font-medium">
               {step === 'capturing' ? 'Capturing...' : 'Processing...'}
             </span>
@@ -179,7 +184,7 @@ const FaceRegistrationPage = () => {
           {step === 'initial' && (
             <div className="text-center text-muted-foreground">
               <Camera className="w-12 h-12 mx-auto mb-2" />
-              <p className="text-sm">Ready to capture your face</p>
+              <p className="text-xs sm:text-sm">Ready to capture your face</p>
             </div>
           )}
 
@@ -206,7 +211,7 @@ const FaceRegistrationPage = () => {
               )}
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 transform">
                 <div className="bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full">
-                  <p className="text-sm font-medium">
+                  <p className="text-xs sm:text-sm font-medium">
                     {countdown > 0
                       ? `Capturing in ${countdown}...`
                       : 'Hold steady while we capture your face'}
@@ -225,7 +230,7 @@ const FaceRegistrationPage = () => {
               />
               <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
                 <div className="bg-background/90 backdrop-blur-sm px-4 py-2 rounded-lg">
-                  <p className="text-sm font-medium">
+                  <p className="text-xs sm:text-sm font-medium">
                     Processing with DeepFace...
                   </p>
                 </div>
@@ -237,7 +242,7 @@ const FaceRegistrationPage = () => {
             <div className="text-center text-green-600">
               <CheckCircle className="w-16 h-16 mx-auto mb-2" />
               <p className="font-medium">Registration Complete!</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Redirecting to settings...
               </p>
             </div>
@@ -247,7 +252,9 @@ const FaceRegistrationPage = () => {
             <div className="text-center text-destructive">
               <XCircle className="w-16 h-16 mx-auto mb-2" />
               <p className="font-medium">Registration Failed</p>
-              <p className="text-sm text-muted-foreground">Please try again</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Please try again
+              </p>
             </div>
           )}
         </div>
@@ -257,18 +264,20 @@ const FaceRegistrationPage = () => {
       {error && (
         <Alert variant="destructive" className="mb-4">
           <XCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="text-xs sm:text-sm leading-relaxed">
+            {error}
+          </AlertDescription>
         </Alert>
       )}
 
       {/* Instructions */}
       {step === 'initial' && (
-        <div className="text-center text-sm text-muted-foreground space-y-2 mb-6">
-          <p>• Position your face in the center of the frame</p>
-          <p>• Ensure good lighting (avoid backlighting)</p>
-          <p>• Remove glasses or hats if possible</p>
-          <p>• Look directly at the camera</p>
-          <p>• Only one person should be visible</p>
+        <div className="text-center text-xs sm:text-sm text-muted-foreground space-y-2 mb-6 leading-relaxed">
+          <p>- Position your face in the center of the frame</p>
+          <p>- Ensure good lighting (avoid backlighting)</p>
+          <p>- Remove glasses or hats if possible</p>
+          <p>- Look directly at the camera</p>
+          <p>- Only one person should be visible</p>
         </div>
       )}
 
@@ -297,7 +306,7 @@ const FaceRegistrationPage = () => {
             <Button
               variant="ghost"
               onClick={() => navigate('/settings')}
-              className="text-sm"
+              className="text-xs sm:text-sm"
             >
               Cancel
             </Button>
@@ -317,41 +326,51 @@ const FaceRegistrationPage = () => {
     <AuthBrandIntro
       title="Enable Face Recognition"
       description="Set up passwordless authentication with military-grade DeepFace AI technology in seconds."
+      className="w-full max-w-xl px-3 sm:px-6 lg:px-8"
+      contentClassName="space-y-1 sm:space-y-3 text-center sm:text-left"
+      titleClassName="text-[20px] sm:text-4xl"
+      descriptionClassName="text-[9px] sm:text-sm"
     >
-      <div className="mt-8 space-y-4">
-        <div className="flex items-start gap-3">
+      <div className="mt-6 sm:mt-8 space-y-4">
+        <div className="flex items-start gap-3 sm:gap-4">
           <div className="mt-1">
-            <Shield className="w-6 h-6 text-primary" />
+            <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
           </div>
           <div>
-            <h3 className="font-semibold text-lg mb-1">Advanced Security</h3>
-            <p className="text-gray-600 text-sm">
+            <h3 className="font-semibold text-base sm:text-lg mb-1">
+              Advanced Security
+            </h3>
+            <p className="text-gray-600 text-xs sm:text-sm">
               Powered by Facenet512 deep learning model with facial embeddings.
               Your actual photos are never stored.
             </p>
           </div>
         </div>
 
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 sm:gap-4">
           <div className="mt-1">
-            <Zap className="w-6 h-6 text-primary" />
+            <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
           </div>
           <div>
-            <h3 className="font-semibold text-lg mb-1">Quick Setup</h3>
-            <p className="text-gray-600 text-sm">
+            <h3 className="font-semibold text-base sm:text-lg mb-1">
+              Quick Setup
+            </h3>
+            <p className="text-gray-600 text-xs sm:text-sm">
               Registration takes less than 10 seconds. One photo is all we need
               for accurate recognition.
             </p>
           </div>
         </div>
 
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 sm:gap-4">
           <div className="mt-1">
-            <Sparkles className="w-6 h-6 text-primary" />
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
           </div>
           <div>
-            <h3 className="font-semibold text-lg mb-1">Seamless Login</h3>
-            <p className="text-gray-600 text-sm">
+            <h3 className="font-semibold text-base sm:text-lg mb-1">
+              Seamless Login
+            </h3>
+            <p className="text-gray-600 text-xs sm:text-sm">
               Skip passwords entirely. Just look at your camera and you're in -
               works even with different lighting and angles.
             </p>
@@ -366,8 +385,10 @@ const FaceRegistrationPage = () => {
       <AuthPageShell
         backgroundImage={AUTH_PAGE_DEFAULT_BACKGROUND}
         waveImage="/images/b1bc6b54-fe3f-45eb-8a39-005cc575deef.png"
-        formWrapperClassName="order-2 md:order-1 w-full flex justify-center px-4 md:px-0"
-        asideWrapperClassName="order-1 md:order-2 mb-10 md:mb-0 flex justify-center"
+        paddingClassName="px-4 sm:px-6 lg:px-10 xl:px-16 py-10 sm:py-12 lg:py-16"
+        gridClassName="gap-2 sm:gap-10 lg:gap-16"
+        formWrapperClassName="order-2 md:order-1 w-full flex justify-center px-2 sm:px-4 md:px-0"
+        asideWrapperClassName="order-1 md:order-2 mb-2 sm:mb-0 flex justify-center px-2 sm:px-4"
         formSlot={registrationCard}
         asideSlot={welcomeIntro}
       />

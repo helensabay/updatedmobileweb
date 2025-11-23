@@ -15,6 +15,8 @@ const AuthBrandIntro = ({
   description,
   className = '',
   contentClassName = 'space-y-2',
+  titleClassName = '',
+  descriptionClassName = '',
   children,
 }) => {
   const badgeImageClasses = [badgeClassName, badgeImageClassName]
@@ -48,12 +50,22 @@ const AuthBrandIntro = ({
       )}
       <div className={contentClassName}>
         {title && (
-          <h1 className="text-3xl sm:text-4xl font-semibold text-gray-900">
+          <h1
+            className={cn(
+              'text-3xl sm:text-4xl font-semibold text-gray-900',
+              titleClassName
+            )}
+          >
             {title}
           </h1>
         )}
         {description && (
-          <p className="text-sm text-gray-600 max-w-sm mx-auto md:mx-0">
+          <p
+            className={cn(
+              'text-sm text-gray-600 max-w-sm mx-auto md:mx-0',
+              descriptionClassName
+            )}
+          >
             {description}
           </p>
         )}
@@ -74,6 +86,8 @@ AuthBrandIntro.propTypes = {
   description: PropTypes.node,
   className: PropTypes.string,
   contentClassName: PropTypes.string,
+  titleClassName: PropTypes.string,
+  descriptionClassName: PropTypes.string,
   children: PropTypes.node,
 };
 

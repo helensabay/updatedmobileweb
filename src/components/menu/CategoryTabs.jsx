@@ -19,6 +19,8 @@ const CategoryTabs = ({
   const [view, setView] = useState('grid');
   const [activeTab, setActiveTab] = useState('all');
   const showArchived = activeTab === 'archived';
+  const tabTriggerClasses =
+    'min-w-fit whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm';
 
   useEffect(() => {
     if (showArchived) setView('list');
@@ -35,11 +37,19 @@ const CategoryTabs = ({
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <TabsList
-          className={showArchived ? 'hidden md:flex md:opacity-60' : undefined}
+          className={`${
+            showArchived ? 'hidden md:flex md:opacity-60' : 'flex'
+          } h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border/40 bg-background/80 p-1 shadow-sm sm:gap-2`}
         >
-          <TabsTrigger value="all">All Items</TabsTrigger>
+          <TabsTrigger value="all" className={tabTriggerClasses}>
+            All Items
+          </TabsTrigger>
           {categories.map((category) => (
-            <TabsTrigger key={category} value={category}>
+            <TabsTrigger
+              key={category}
+              value={category}
+              className={tabTriggerClasses}
+            >
               {category}
             </TabsTrigger>
           ))}

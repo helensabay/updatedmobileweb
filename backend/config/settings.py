@@ -43,8 +43,17 @@ INSTALLED_APPS = [
     # Local apps
     "api",
     "accounts",
-    "mobile_api",
+    "menu",
+    'notifications.apps.NotificationsConfig',
+
+    'feedback',  # ✅ add this
+
+
 ]
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Keep middleware lightweight; omit session/auth/csrf
 MIDDLEWARE = [
@@ -111,13 +120,17 @@ DISABLE_INMEM_FALLBACK = (
     os.getenv("DJANGO_DISABLE_INMEM_FALLBACK", "0") in {"1", "true", "True", "yes", "on"}
     or not DEBUG
 )
+AUTH_USER_MODEL = "api.AppUser"
+
+
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "mobile_api.authentication.JWTAuthentication",
-    ),
+    
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
+    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 25,
@@ -145,8 +158,10 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
 
 # Media (public) and Private Media (not served directly)
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# At the bottom of settings.py
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'  # or os.path.join(BASE_DIR, 'media')
+
 
 # Private media directory for sensitive uploads (e.g., identity headshots)
 # Not served by Django; use authenticated views or presigned URLs.

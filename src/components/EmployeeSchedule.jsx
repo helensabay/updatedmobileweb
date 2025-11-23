@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/AuthContext';
 import { useEmployees, useSchedule } from '@/hooks/useEmployees';
@@ -13,6 +13,7 @@ import AttendanceAdmin from '@/components/AttendanceAdmin';
 import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CalendarDays, ClipboardList, Plane } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -84,6 +85,7 @@ const EmployeeSchedule = () => {
   });
   const [activeTab, setActiveTab] = useState('schedule');
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
+  const attendanceAutoOpenDismissed = useRef(false);
 
   const hasShiftToday = useMemo(() => {
     // Check if user has a linked Employee record
@@ -236,6 +238,38 @@ const EmployeeSchedule = () => {
     location.state,
     scheduleLoading,
     navigate,
+  ]);
+
+  const handleAttendanceDialogChange = (open) => {
+    if (!open) {
+      attendanceAutoOpenDismissed.current = true;
+    }
+    setAttendanceDialogOpen(open);
+  };
+
+  useEffect(() => {
+    if (!isStaffOnly) return;
+
+    const normalizedPath = (location.pathname || '').replace(/\/+$/, '') || '/';
+    const matchesEmployeesRoute =
+      normalizedPath === '/employees' || normalizedPath === '/employeed';
+
+    if (!matchesEmployeesRoute) {
+      attendanceAutoOpenDismissed.current = false;
+      return;
+    }
+
+    if (scheduleLoading || !hasShiftToday) return;
+    if (attendanceDialogOpen || attendanceAutoOpenDismissed.current) return;
+
+    attendanceAutoOpenDismissed.current = true;
+    setAttendanceDialogOpen(true);
+  }, [
+    attendanceDialogOpen,
+    hasShiftToday,
+    isStaffOnly,
+    location.pathname,
+    scheduleLoading,
   ]);
 
   const lookupEmployeeName = (employeeId) =>
@@ -426,24 +460,30 @@ const EmployeeSchedule = () => {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
-          <TabsList className="flex w-full flex-wrap gap-2 justify-start w-fit">
+          <TabsList className="grid w-full grid-cols-3 divide-x divide-border rounded-lg bg-muted/40 text-xs sm:flex sm:w-fit sm:flex-wrap sm:gap-2 sm:divide-x-0 sm:bg-transparent">
             <TabsTrigger
               value="schedule"
-              className="min-w-[160px] flex-1 sm:flex-none"
+              aria-label="Weekly Schedule"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
             >
-              Weekly Schedule
+              <CalendarDays className="h-4 w-4 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Weekly Schedule</span>
             </TabsTrigger>
             <TabsTrigger
               value="attendance"
-              className="min-w-[160px] flex-1 sm:flex-none"
+              aria-label="Attendance Records"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
             >
-              Attendance Records
+              <ClipboardList className="h-4 w-4 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Attendance Records</span>
             </TabsTrigger>
             <TabsTrigger
               value="leave"
-              className="min-w-[160px] flex-1 sm:flex-none"
+              aria-label="Leave Records"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
             >
-              Leave Requests
+              <Plane className="h-4 w-4 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Leave Records</span>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="schedule" className="space-y-6">
@@ -497,7 +537,7 @@ const EmployeeSchedule = () => {
       {user && (
         <Dialog
           open={attendanceDialogOpen}
-          onOpenChange={setAttendanceDialogOpen}
+          onOpenChange={handleAttendanceDialogChange}
         >
           <DialogContent className="sm:max-w-[420px]">
             <DialogHeader>

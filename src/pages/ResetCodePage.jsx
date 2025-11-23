@@ -28,7 +28,7 @@ const ResetCodePage = () => {
   const [resendPending, setResendPending] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const lastSubmittedRef = useRef('');
+  const autoSubmittedCodeRef = useRef('');
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -125,9 +125,7 @@ const ResetCodePage = () => {
       return;
     }
     if (code.length !== DIGIT_COUNT) return;
-    if (code === lastSubmittedRef.current) return;
     setPending(true);
-    lastSubmittedRef.current = code;
     try {
       const res = await authService.verifyPasswordReset(email, code);
       if (!res?.success || !res?.resetToken) {
@@ -140,18 +138,21 @@ const ResetCodePage = () => {
       navigate(`/set-new-password?token=${encodeURIComponent(res.resetToken)}`);
     } catch (err) {
       setError('Could not verify code.');
-      lastSubmittedRef.current = '';
     } finally {
       setPending(false);
     }
   }, [code, email, navigate, pending, resendPending]);
 
   useEffect(() => {
-    if (code.length !== DIGIT_COUNT) return undefined;
+    if (code.length !== DIGIT_COUNT) {
+      autoSubmittedCodeRef.current = '';
+      return undefined;
+    }
     if (pending || resendPending) return undefined;
-    if (code === lastSubmittedRef.current) return undefined;
+    if (autoSubmittedCodeRef.current === code) return undefined;
 
     const id = window.setTimeout(() => {
+      autoSubmittedCodeRef.current = code;
       verifyCode();
     }, 150);
 
@@ -161,7 +162,7 @@ const ResetCodePage = () => {
   const onResend = useCallback(async () => {
     setError('');
     setSuccess('');
-    lastSubmittedRef.current = '';
+    autoSubmittedCodeRef.current = '';
     if (!email) {
       setError(
         'We could not determine your email. Please restart the reset process.'
@@ -185,10 +186,10 @@ const ResetCodePage = () => {
     <AuthCard
       title="Enter Verification Code"
       compact
-      className="mx-auto"
-      cardClassName="shadow-2xl"
+      className="!max-w-full sm:!max-w-md lg:!max-w-lg"
+      cardClassName="shadow-2xl lg:p-8"
     >
-      <p className="text-sm text-gray-600 mb-4">
+      <p className="text-xs sm:text-sm text-gray-600 mb-4 leading-relaxed max-w-prose">
         We sent a 6-digit reset code to{' '}
         <span className="font-medium">{maskEmail(email)}</span>. Enter it below
         to continue.
@@ -196,7 +197,7 @@ const ResetCodePage = () => {
 
       {(error || success) && (
         <div
-          className={`p-3 mb-4 rounded-lg text-sm ${
+          className={`p-3 sm:p-4 mb-4 rounded-lg text-xs sm:text-sm leading-relaxed ${
             success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
           }`}
           role="alert"
@@ -212,11 +213,14 @@ const ResetCodePage = () => {
           event.preventDefault();
           verifyCode();
         }}
-        className="space-y-3"
+        className="space-y-4 sm:space-y-5"
         noValidate
         aria-busy={pending || resendPending || undefined}
       >
-        <div className="flex justify-between gap-2" onPaste={handlePaste}>
+        <div
+          className="flex flex-wrap items-center justify-center gap-2 sm:gap-3"
+          onPaste={handlePaste}
+        >
           {digits.map((digit, index) => (
             <input
               key={index}
@@ -233,7 +237,7 @@ const ResetCodePage = () => {
               onKeyDown={(event) => handleKeyDown(index, event)}
               disabled={pending || resendPending}
               maxLength={1}
-              className="w-12 h-12 text-center text-xl font-semibold border border-gray-300 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+              className="w-10 h-10 sm:w-11 sm:h-11 text-center text-lg sm:text-2xl font-semibold border border-gray-300 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all"
             />
           ))}
         </div>
@@ -247,15 +251,18 @@ const ResetCodePage = () => {
         )}
       </form>
 
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <Link to="/login" className="text-primary underline underline-offset-2">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
+        <Link
+          to="/login"
+          className="text-primary underline underline-offset-2 font-semibold text-center sm:text-left"
+        >
           Back to Login
         </Link>
         <button
           type="button"
           onClick={onResend}
           disabled={pending || resendPending || !email}
-          className="text-primary hover:text-primary-dark disabled:opacity-60 disabled:cursor-not-allowed"
+          className="text-primary hover:text-primary-dark disabled:opacity-60 disabled:cursor-not-allowed text-center sm:text-right"
         >
           Resend code
         </button>
@@ -267,6 +274,10 @@ const ResetCodePage = () => {
     <AuthBrandIntro
       title="Check your inbox"
       description="Enter the verification code we emailed you so we can confirm the password reset request."
+      className="w-full max-w-xl px-3 sm:px-6 lg:px-8"
+      contentClassName="space-y-1 sm:space-y-3 text-center sm:text-left"
+      titleClassName="text-[20px] sm:text-4xl"
+      descriptionClassName="text-[9px] sm:text-sm"
     />
   );
 
@@ -275,7 +286,10 @@ const ResetCodePage = () => {
       <AuthPageShell
         backgroundImage={AUTH_PAGE_DEFAULT_BACKGROUND}
         waveImage="/images/b1bc6b54-fe3f-45eb-8a39-005cc575deef.png"
-        formWrapperClassName="max-w-md mr-auto md:mr-[min(8rem,14vw)] md:ml-0"
+        paddingClassName="px-4 sm:px-6 lg:px-10 xl:px-16 py-10 sm:py-12 lg:py-16"
+        gridClassName="gap-2 sm:gap-10 lg:gap-16"
+        formWrapperClassName="order-2 md:order-1 w-full flex justify-center px-2 sm:px-4 md:px-0"
+        asideWrapperClassName="order-1 md:order-2 mb-2 sm:mb-0 flex justify-center px-2 sm:px-4"
         formSlot={codeCard}
         asideSlot={introContent}
       />

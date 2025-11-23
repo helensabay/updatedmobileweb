@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, Save, ArrowLeft } from 'lucide-react';
+import { AlertCircle, Save, ArrowLeft, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import CateringMenuSelection from './CateringMenuSelection';
 import CateringOrderSummary from './CateringOrderSummary';
@@ -9,6 +9,13 @@ import PaymentModal from './PaymentModal';
 import useCateringMenu from '@/hooks/useCateringMenu';
 import cateringService from '@/api/services/cateringService';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
 const CateringMenuPage = () => {
   const { eventId } = useParams();
@@ -24,6 +31,7 @@ const CateringMenuPage = () => {
   const [discountType, setDiscountType] = useState('fixed');
   const [isSaving, setIsSaving] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
 
   // Fetch event data
   useEffect(() => {
@@ -235,14 +243,33 @@ const CateringMenuPage = () => {
         title={`Catering Menu - ${event.name || event.clientName}`}
         description={`${event.client || event.clientName} • ${event.attendees || event.guestCount} attendees`}
         headerActions={
-          <Button
-            variant="outline"
-            onClick={() => navigate('/catering')}
-            disabled={isSaving}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigate('/catering')}
+              disabled={isSaving}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <button
+              type="button"
+              onClick={() => setIsMobileOrderSheetOpen(true)}
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
+              aria-label={
+                itemCount > 0
+                  ? `View selected items (${itemCount})`
+                  : 'View selected items'
+              }
+            >
+              <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+              {itemCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 min-h-[1.1rem] min-w-[1.1rem] rounded-full bg-destructive px-1 text-[11px] font-semibold leading-[1.1rem] text-destructive-foreground">
+                  {itemCount > 99 ? '99+' : itemCount}
+                </span>
+              )}
+            </button>
+          </div>
         }
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -280,7 +307,7 @@ const CateringMenuPage = () => {
           </div>
 
           {/* Right Panel: Order Summary */}
-          <div>
+          <div className="hidden lg:block">
             <CateringOrderSummary
               selectedItems={selectedItems}
               onUpdateQuantity={handleUpdateQuantity}
@@ -299,6 +326,48 @@ const CateringMenuPage = () => {
           </div>
         </div>
       </FeaturePanelCard>
+
+      <Sheet
+        open={isMobileOrderSheetOpen}
+        onOpenChange={setIsMobileOrderSheetOpen}
+      >
+        <SheetContent
+          side="bottom"
+          className="flex h-[88vh] flex-col overflow-hidden rounded-t-3xl border-t border-border bg-background/95 p-0 lg:hidden"
+        >
+          <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 pb-3 pt-4">
+            <SheetHeader className="space-y-1 text-left">
+              <SheetTitle className="text-base font-semibold text-foreground">
+                Catering Order Summary
+              </SheetTitle>
+              <SheetDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {event.name || event.clientName} -{' '}
+                {event.attendees || event.guestCount} attendees
+              </SheetDescription>
+            </SheetHeader>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-5">
+            <CateringOrderSummary
+              selectedItems={selectedItems}
+              onUpdateQuantity={handleUpdateQuantity}
+              onRemoveItem={handleRemoveItem}
+              onClearAll={handleClearAll}
+              discount={discount}
+              discountType={discountType}
+              onDiscountChange={setDiscount}
+              onDiscountTypeChange={setDiscountType}
+              canProcessPayment={Boolean(event?.estimatedTotal || event?.total)}
+              onProcessPayment={() => {
+                setIsMobileOrderSheetOpen(false);
+                setShowPaymentModal(true);
+              }}
+              onSaveOrder={handleSaveOrder}
+              isSaving={isSaving}
+              itemCount={itemCount}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Payment Modal */}
       <PaymentModal

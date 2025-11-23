@@ -42,11 +42,24 @@ export const UserTable = ({
                 >
                   <td className="p-4 align-middle">
                     <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarFallback>
-                          {getInitials(user.name)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <div className="relative">
+                        <Avatar>
+                          <AvatarFallback>
+                            {getInitials(user.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        {user.status === 'active' && (
+                          <>
+                            <span
+                              className="absolute -bottom-0.5 -right-0.5 inline-flex h-3 w-3 rounded-full border-2 border-background bg-emerald-400"
+                              aria-hidden="true"
+                            />
+                            <span className="sr-only">
+                              {user.name} is online
+                            </span>
+                          </>
+                        )}
+                      </div>
                       <div>
                         <p className="font-medium">{user.name}</p>
                         <p className="text-sm text-muted-foreground">

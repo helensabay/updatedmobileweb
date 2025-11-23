@@ -11,6 +11,14 @@ import { usePOSLogic } from '@/hooks/usePOSLogic';
 import { useOrderHistory } from '@/hooks/useOrderManagement';
 import { orderService } from '@/api/services/orderService';
 import { paymentsService } from '@/api/services/paymentsService';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { formatOrderNumber } from '@/lib/utils';
 
 const POS = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,6 +35,7 @@ const POS = () => {
     card: true,
     mobile: true,
   });
+  const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
 
   // Get data and business logic from custom hooks
   const { categories, orderQueue, setOrderQueue } = usePOSData();
@@ -73,6 +82,14 @@ const POS = () => {
   const paymentDisabledMessage = isSelectedPaymentEnabled
     ? null
     : `${paymentMethodLabels[paymentMethod] || 'Selected'} payments are disabled`;
+  const orderCount = Array.isArray(currentOrder) ? currentOrder.length : 0;
+  const orderLabel = orderNumber
+    ? formatOrderNumber(orderNumber)
+    : 'Pending Payment';
+  const orderDescription = orderNumber
+    ? `Order #${orderLabel}`
+    : orderLabel || 'Pending Payment';
+  const itemSummary = `${orderCount} item${orderCount === 1 ? '' : 's'} in cart`;
 
   const handleApplyDiscount = () => {
     const success = applyDiscount(discountInput, discountType);
@@ -226,6 +243,8 @@ const POS = () => {
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onAddToOrder={addToOrder}
+              mobileOrderCount={orderCount}
+              onOpenMobileOrder={() => setIsMobileOrderSheetOpen(true)}
             />
 
             <CurrentOrder
@@ -258,6 +277,56 @@ const POS = () => {
           />
         </TabsContent>
       </Tabs>
+
+      <Sheet
+        open={isMobileOrderSheetOpen}
+        onOpenChange={setIsMobileOrderSheetOpen}
+      >
+        <SheetContent
+          side="bottom"
+          className="flex h-[88vh] flex-col overflow-hidden rounded-t-3xl border-t border-border bg-background/95 p-0 md:hidden"
+        >
+          <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 pb-3 pt-4">
+            <SheetHeader className="space-y-1 text-left">
+              <SheetTitle className="text-base font-semibold text-foreground">
+                {orderDescription}
+              </SheetTitle>
+              <SheetDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {itemSummary}
+              </SheetDescription>
+            </SheetHeader>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-5">
+            <CurrentOrder
+              variant="sheet"
+              currentOrder={currentOrder}
+              discount={discount}
+              orderNumber={orderNumber}
+              onUpdateQuantity={updateQuantity}
+              onRemoveFromOrder={removeFromOrder}
+              onClearOrder={clearOrder}
+              onRemoveDiscount={removeDiscount}
+              calculateSubtotal={calculateSubtotal}
+              calculateDiscountAmount={calculateDiscountAmount}
+              calculateTotal={calculateTotal}
+              onOpenPaymentModal={() => {
+                setIsMobileOrderSheetOpen(false);
+                handleOpenPaymentModal();
+              }}
+              onOpenDiscountModal={() => {
+                setIsMobileOrderSheetOpen(false);
+                setIsDiscountModalOpen(true);
+              }}
+              onOpenHistoryModal={() => {
+                setIsMobileOrderSheetOpen(false);
+                setIsOrderHistoryModalOpen(true);
+              }}
+              isPaymentMethodEnabled={isSelectedPaymentEnabled}
+              paymentDisabledMessage={paymentDisabledMessage}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <PaymentModal
         isOpen={isPaymentModalOpen}

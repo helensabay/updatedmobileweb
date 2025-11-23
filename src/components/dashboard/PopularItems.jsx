@@ -98,7 +98,7 @@ const PopularItems = ({ itemsToday, itemsYesterday }) => {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-4">
           {/* Today's Popular Items */}
           <div className="flex flex-col">
             <h4 className="text-sm font-semibold text-center mb-2 text-primary">

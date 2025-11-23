@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { storeTokens, USER_CACHE_KEY } from '../api/api'; // Adjust path if needed
+
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -26,9 +28,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Backend API
-const LOCAL_IP = '192.168.1.6'; // Change to your backend IP
-const API_BASE = `http://${LOCAL_IP}:8000/api`;
+// ✅ Backend API base
+const LOCAL_IP = '192.168.1.11';
+const API_BASE = `http://${LOCAL_IP}:8000/api/accounts`;
 
 export default function AccountLoginScreen() {
   const router = useRouter();
@@ -47,12 +49,14 @@ export default function AccountLoginScreen() {
     return String(msg);
   };
 
-  // Google Auth Config
+  // ✅ Google Auth Config
   const googleConfig = {
-    expoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    expoClientId:
+      '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
+    androidClientId:
+      '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
+    webClientId:
+      '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
     responseType: 'id_token',
     scopes: ['profile', 'email'],
     selectAccount: true,
@@ -61,7 +65,7 @@ export default function AccountLoginScreen() {
   const [request, , promptAsync] = Google.useAuthRequest(googleConfig);
   const validateEmail = useCallback((value) => /\S+@\S+\.\S+/.test(value), []);
 
-  // Auto redirect if already logged in
+  // ✅ Auto redirect if already logged in
   useEffect(() => {
     const checkUser = async () => {
       const storedUser = await AsyncStorage.getItem('user');
@@ -73,7 +77,7 @@ export default function AccountLoginScreen() {
     checkUser();
   }, []);
 
-  // Login API
+  // ✅ Login API
   const login = async ({ email, password }) => {
     try {
       const response = await fetch(`${API_BASE}/login/`, {
@@ -81,10 +85,16 @@ export default function AccountLoginScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+
       const data = await response.json();
+
       if (!response.ok) {
-        return { success: false, message: data.detail || data.message || 'Invalid credentials' };
+        return {
+          success: false,
+          message: data.detail || data.message || 'Invalid credentials',
+        };
       }
+
       return { success: true, data };
     } catch (error) {
       console.error('Login API error:', error);
@@ -92,45 +102,58 @@ export default function AccountLoginScreen() {
     }
   };
 
-  // Email/password login
-  const handleLogin = async () => {
-    if (loading) return;
+  // ✅ Email/password login handler
+const handleLogin = async () => {
+  if (loading) return;
 
-    const errs = {};
-    if (!validateEmail(email)) errs.email = 'Invalid email address';
-    if (password.length < 6) errs.password = 'Password must be at least 6 characters';
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) return;
+  const errs = {};
+  if (!validateEmail(email)) errs.email = 'Invalid email address';
+  if (password.length < 6) errs.password = 'Password must be at least 6 characters';
+  setErrors(errs);
+  if (Object.keys(errs).length > 0) return;
 
-    setLoading(true);
-    try {
-      const { success, data, message } = await login({ email, password });
-      if (!success) {
-        return Alert.alert('Login Failed', formatMessage(message || 'Incorrect email or password'));
-      }
+  setLoading(true);
 
-      const profileRes = await fetch(`${API_BASE}/profile/`, {
-        headers: { Authorization: `Bearer ${data.access}` },
-      });
-      const profile = await profileRes.json();
+  try {
+    const { success, data, message } = await login({ email, password });
 
-      await AsyncStorage.setItem('user', JSON.stringify(profile));
-      await AsyncStorage.setItem('accessToken', data.access);
-      await AsyncStorage.setItem('refreshToken', data.refresh);
-      setUser(profile);
-
-      Alert.alert('Success', 'Login successful!', [
-        { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
-      ]);
-    } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('Login Failed', 'Network or server error. Please try again.');
-    } finally {
-      setLoading(false);
+    if (!success) {
+      return Alert.alert('Login Failed', message || 'Incorrect credentials');
     }
-  };
 
-  // Google login
+    // ✅ Save tokens
+    await storeTokens({ accessToken: data.access, refreshToken: data.refresh });
+
+    // ✅ Use the token directly from API response
+    const profileRes = await fetch(`${API_BASE}/profile/`, {
+      headers: { Authorization: `Bearer ${data.access}` },
+    });
+
+    if (!profileRes.ok) {
+      const errData = await profileRes.json();
+      throw new Error(errData.detail || 'Failed to fetch profile');
+    }
+
+    const profile = await profileRes.json();
+
+    // ✅ Save user profile
+    await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
+    setUser(profile);
+
+    Alert.alert('Success', 'Login successful!', [
+      { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
+    ]);
+
+  } catch (error) {
+    console.error('Login error:', error);
+    Alert.alert('Login Failed', formatMessage(error.message));
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  // ✅ Google login handler
   const handleGoogleSignIn = useCallback(async () => {
     if (!request) {
       Alert.alert('Unavailable', 'Google Sign-In not configured for this build.');
@@ -150,6 +173,7 @@ export default function AccountLoginScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: idToken }),
       });
+
       const loginData = await loginResponse.json();
 
       if (loginResponse.ok && loginData.access) {
@@ -159,6 +183,7 @@ export default function AccountLoginScreen() {
         const profileRes = await fetch(`${API_BASE}/profile/`, {
           headers: { Authorization: `Bearer ${loginData.access}` },
         });
+
         const profile = await profileRes.json();
         await AsyncStorage.setItem('user', JSON.stringify(profile));
         setUser(profile);
@@ -167,17 +192,20 @@ export default function AccountLoginScreen() {
           { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
         ]);
       } else {
-        Alert.alert('Google Login Failed', formatMessage(loginData.detail || 'Unable to authenticate with Google.'));
+        Alert.alert(
+          'Google Login Failed',
+          formatMessage(loginData.detail || 'Unable to authenticate with Google.')
+        );
       }
     } catch (error) {
       console.error('Google login error:', error);
-      Alert.alert('Google Login Failed', formatMessage(error.message || 'Please try again.'));
+      Alert.alert('Google Login Failed', formatMessage(error.message));
     } finally {
       setGoogleLoading(false);
     }
   }, [promptAsync, request, router]);
 
-  // Guest login
+  // ✅ Guest login handler
   const handleGuestEntry = useCallback(async () => {
     if (guestLoading) return;
     setGuestLoading(true);
@@ -189,17 +217,17 @@ export default function AccountLoginScreen() {
           { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
         ]);
       } else {
-        Alert.alert('Unavailable', formatMessage(data.message || 'Unable to continue without an account.'));
+        Alert.alert('Unavailable', formatMessage(data.message));
       }
     } catch (error) {
       console.error('Guest entry error:', error);
-      Alert.alert('Unavailable', formatMessage(error?.message || 'Please try again.'));
+      Alert.alert('Unavailable', formatMessage(error.message));
     } finally {
       setGuestLoading(false);
     }
   }, [router, guestLoading]);
 
-  // Load fonts
+  // ✅ Load fonts
   const [fontsLoaded] = useFonts({
     Roboto_400Regular,
     Roboto_700Bold,
@@ -222,10 +250,16 @@ export default function AccountLoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
-          <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <View style={styles.card}>
             <Text style={styles.title}>Welcome Back!</Text>
-            <Text style={styles.subtitle}>Sign in to enjoy delicious canteen meals</Text>
+            <Text style={styles.subtitle}>
+              Sign in to enjoy delicious canteen meals
+            </Text>
 
             {/* Email */}
             <View style={styles.inputWrapper}>
@@ -258,19 +292,48 @@ export default function AccountLoginScreen() {
             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
             {/* Login Button */}
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
-              {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.loginText}>Login</Text>}
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.loginText}>Login</Text>
+              )}
             </TouchableOpacity>
 
             {/* Google Button */}
-            <TouchableOpacity style={styles.googleButton} disabled={!request || googleLoading} onPress={handleGoogleSignIn}>
-              {googleLoading ? <ActivityIndicator size="small" color="#4285F4" /> : <Image source={require('../../assets/google.png')} style={styles.googleIcon} />}
-              <Text style={styles.googleText}>{googleLoading ? 'Connecting...' : 'Continue with Google'}</Text>
+            <TouchableOpacity
+              style={styles.googleButton}
+              disabled={!request || googleLoading}
+              onPress={handleGoogleSignIn}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color="#4285F4" />
+              ) : (
+                <Image
+                  source={require('../../assets/google.png')}
+                  style={styles.googleIcon}
+                />
+              )}
+              <Text style={styles.googleText}>
+                {googleLoading ? 'Connecting...' : 'Continue with Google'}
+              </Text>
             </TouchableOpacity>
 
             {/* Guest Button */}
-            <TouchableOpacity style={styles.guestButton} onPress={handleGuestEntry} disabled={guestLoading}>
-              {guestLoading ? <ActivityIndicator size="small" color="#FF8C00" /> : <Text style={styles.guestText}>Continue without an account</Text>}
+            <TouchableOpacity
+              style={styles.guestButton}
+              onPress={handleGuestEntry}
+              disabled={guestLoading}
+            >
+              {guestLoading ? (
+                <ActivityIndicator size="small" color="#FF8C00" />
+              ) : (
+                <Text style={styles.guestText}>Continue without an account</Text>
+              )}
             </TouchableOpacity>
 
             {/* Links */}
@@ -278,7 +341,10 @@ export default function AccountLoginScreen() {
               <Text style={styles.linkText}>Forgot Password?</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/account-registration')}>
-              <Text style={styles.linkText}>Don’t have an account? <Text style={{ fontFamily: 'Roboto_700Bold' }}>Sign Up</Text></Text>
+              <Text style={styles.linkText}>
+                Don’t have an account?{' '}
+                <Text style={{ fontFamily: 'Roboto_700Bold' }}>Sign Up</Text>
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -293,19 +359,75 @@ const styles = StyleSheet.create({
   container: { alignItems: 'center', justifyContent: 'flex-start', flex: 1 },
   logo: { width: 180, height: 180, marginTop: 35 },
   title: { fontSize: 28, fontFamily: 'Roboto_900Black', color: '#333', marginBottom: 2 },
-  subtitle: { fontSize: 15, color: '#666', marginBottom: 30, textAlign: 'left', fontFamily: 'Roboto_400Regular' },
-  card: { width: '100%', backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 25, elevation: 3, marginTop: 25 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, backgroundColor: '#F5F5F5' },
-  input: { flex: 1, paddingVertical: 12, fontSize: 16, color: '#333', fontFamily: 'Roboto_400Regular' },
+  subtitle: {
+    fontSize: 15,
+    color: '#666',
+    marginBottom: 30,
+    textAlign: 'left',
+    fontFamily: 'Roboto_400Regular',
+  },
+  card: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 20,
+    padding: 25,
+    elevation: 3,
+    marginTop: 25,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    backgroundColor: '#F5F5F5',
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+    fontFamily: 'Roboto_400Regular',
+  },
   inputError: { borderColor: 'red' },
-  loginButton: { backgroundColor: '#FF8C00', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginVertical: 10 },
+  loginButton: {
+    backgroundColor: '#FF8C00',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginVertical: 10,
+  },
   loginText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  googleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', paddingVertical: 12, borderRadius: 12, marginBottom: 15 },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 15,
+  },
   googleIcon: { width: 22, height: 22, marginRight: 10 },
   googleText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333' },
-  guestButton: { borderWidth: 1, borderColor: '#FF8C00', paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginBottom: 15 },
+  guestButton: {
+    borderWidth: 1,
+    borderColor: '#FF8C00',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   guestText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#FF8C00' },
   linkText: { color: '#FF8C00', marginTop: 5, fontSize: 15, textAlign: 'center' },
-  errorText: { color: 'red', alignSelf: 'flex-start', marginBottom: 10, marginLeft: 5, fontSize: 13 },
+  errorText: {
+    color: 'red',
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    marginLeft: 5,
+    fontSize: 13,
+  },
 });
-

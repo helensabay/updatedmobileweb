@@ -891,52 +891,29 @@ def orders(request):
                 throttle_reason = ", ".join(parts)
                 is_throttled = True
 
-            total = max(Decimal("0"), subtotal - max(Decimal("0"), discount))
-            now_ts = dj_tz.now()
-            promised_time = now_ts + timedelta(minutes=recommended_quote)
-            eta_seconds = recommended_quote * 60
-            order_prefix = requested_channel[:1].upper() or "W"
-            requested_number = _normalize_order_number_candidate(
-                payload.get("orderNumber")
-                or payload.get("order_number")
-                or payload.get("orderNo")
-            )
-
-            if requested_number and not Order.objects.filter(order_number__iexact=requested_number).exists():
-                num = requested_number
-            else:
-                num = generate_unique_order_number(
-                    prefix=order_prefix, order_model=Order
-                )
-
-            payment_method = payload.get("paymentMethod")
-            if not payment_method:
-                payment_method = "cash" if requested_channel == "walk-in" else ""
-
-            o = Order.objects.create(
-                order_number=num,
-                status="accepted",
-                order_type=order_type,
-                channel=requested_channel,
-                customer_name=customer_name,
-                subtotal=subtotal,
-                discount=discount,
-                total_amount=total,
-                payment_method=payment_method,
-                placed_by=actor if hasattr(actor, "id") else None,
-                promised_time=promised_time,
-                quoted_minutes=recommended_quote,
-                priority=requested_priority,
-                eta_seconds=eta_seconds,
-                is_throttled=is_throttled,
-                throttle_reason=throttle_reason,
-                bulk_reference=bulk_reference,
-                shelf_slot=requested_shelf,
-                auto_advance_duration_seconds=AUTO_ADVANCE_DEFAULT_SECONDS,
-            )
-
-            created_items = []
-            for blueprint in line_blueprints:
+        o = Order.objects.create(
+            order_number=num,
+            status="accepted",
+            order_type=order_type,
+            channel=requested_channel,
+            customer_name=customer_name,
+            subtotal=subtotal,
+            discount=discount,
+            total_amount=total,  # Make sure 'total' is Decimal(subtotal - discount)
+            payment_method=payment_method or ("cash" if requested_channel == "walk-in" else ""),
+            placed_by=actor if getattr(actor, "id", None) else None,  # correct FK to AppUser
+            promised_time=promised_time,
+            quoted_minutes=recommended_quote,
+            priority=requested_priority,
+            eta_seconds=eta_seconds,
+            is_throttled=is_throttled,
+            throttle_reason=throttle_reason or "",
+            bulk_reference=bulk_reference or "",
+            shelf_slot=requested_shelf.upper() if requested_shelf else "",
+            auto_advance_duration_seconds=AUTO_ADVANCE_DEFAULT_SECONDS,
+        )
+        created_items = []
+        for blueprint in line_blueprints:
                 item = OrderItem.objects.create(
                     order=o,
                     menu_item=blueprint["menu_item"],
@@ -957,7 +934,7 @@ def orders(request):
                 )
                 created_items.append(item)
 
-            recalc_order_counters(o, created_items)
+        recalc_order_counters(o, created_items)
 
         order_payload = _safe_order(o)
         record_order_event(

@@ -88,7 +88,7 @@ const AuthPageShell = ({
       )}
 
       <div
-        className={`relative z-10 w-full max-w-5xl grid md:grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-center px-4 md:px-0 ${gridClassName}`.trim()}
+        className={`relative z-10 w-full max-w-full sm:max-w-5xl grid md:grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-center gap-2.5 px-0 sm:px-4 md:px-0 ${gridClassName}`.trim()}
       >
         {asideSlot && <div className={asideWrapperClassName}>{asideSlot}</div>}
         {formSlot && (

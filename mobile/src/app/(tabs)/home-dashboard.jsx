@@ -38,6 +38,7 @@ export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const router = useRouter();
   const { cart, addToCart, decreaseQuantity } = useCart();
+
   const [menuItems, setMenuItems] = useState([]);
   const [prevMenuItems, setPrevMenuItems] = useState([]);
   const [menuNotifications, setMenuNotifications] = useState([]);
@@ -64,58 +65,18 @@ export default function HomeDashboardScreen() {
   // ----------------------
   // Load menu items & notifications
   // ----------------------
-const loadMenuItems = async () => {
-  try {
-    setLoading(true);
-    const items = await fetchMenuItems();
-    const availableItems = items.filter(item => !item.archived);
-
-    // Remove notifications for items that no longer exist
-    setMenuNotifications(prev =>
-      prev.filter(n =>
-        availableItems.some(item => item.id === n.item.id) || n.type === 'backend'
-      )
-    );
-
-    const newNotifications = [];
-
-    // Detect new items
-    availableItems.forEach(item => {
-      if (!prevMenuItems.find(prev => prev.id === item.id)) {
-        newNotifications.push({ type: 'new', item });
-      }
-    });
-
-    // Detect sold out items
-    prevMenuItems.forEach(prevItem => {
-      const current = availableItems.find(i => i.id === prevItem.id);
-      if (current && prevItem.available && !current.available) {
-        newNotifications.push({ type: 'soldout', item: current });
-      }
-    });
-
-    setMenuItems(availableItems);
-    setPrevMenuItems(availableItems);
-
-    if (newNotifications.length > 0) {
-      setMenuNotifications(prev => {
-        const merged = [...prev];
-        newNotifications.forEach(n => {
-          if (!prev.find(p => p.item.id === n.item.id && p.type === n.type)) {
-            merged.push(n);
-          }
-        });
-        return merged;
-      });
+  const loadMenuItems = async () => {
+    try {
+      setLoading(true);
+      const items = await fetchMenuItems(); // fetch all items from DB
+      setMenuItems(items); // store all items
+      setPrevMenuItems(items);
+    } catch (err) {
+      console.error('Error fetching menu items:', err);
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('Error fetching menu items:', err);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
+  };
 
   const loadBackendNotifications = async () => {
     try {
@@ -303,19 +264,23 @@ const loadMenuItems = async () => {
               <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: 'white', borderRadius: 12, marginBottom: 8 }}>
                 {item.image && <Image source={{ uri: item.image }} style={{ width: 60, height: 60, borderRadius: 8, marginRight: 12 }} />}
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#111827' }}>{item.name}</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#111827' }}>
+                    {item.name} {item.available === false && <Text style={{ color:'#ef4444' }}> (Sold Out)</Text>}
+                  </Text>
                   <Text style={{ fontSize: 14, color: '#6b7280', marginTop: 2 }}>{item.description}</Text>
                 </View>
                 <Text style={{ fontSize: 16, fontWeight: '700', color: '#f97316' }}>₱{item.price}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 10 }}>
-                  <TouchableOpacity onPress={() => decreaseQuantity(item.id)} style={{ backgroundColor: '#e67e22', padding: 6, borderRadius: 20, marginHorizontal: 4 }}>
-                    <Text style={{ color: '#fff', fontWeight: '700' }}>-</Text>
-                  </TouchableOpacity>
-                  <Text style={{ minWidth: 20, textAlign: 'center', fontWeight: '700' }}>{qty}</Text>
-                  <TouchableOpacity onPress={() => addToCart(item)} style={{ backgroundColor: '#e67e22', padding: 6, borderRadius: 20, marginHorizontal: 4 }}>
-                    <Text style={{ color: '#fff', fontWeight: '700' }}>+</Text>
-                  </TouchableOpacity>
-                </View>
+                {item.available && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 10 }}>
+                    <TouchableOpacity onPress={() => decreaseQuantity(item.id)} style={{ backgroundColor: '#e67e22', padding: 6, borderRadius: 20, marginHorizontal: 4 }}>
+                      <Text style={{ color: '#fff', fontWeight: '700' }}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={{ minWidth: 20, textAlign: 'center', fontWeight: '700' }}>{qty}</Text>
+                    <TouchableOpacity onPress={() => addToCart(item)} style={{ backgroundColor: '#e67e22', padding: 6, borderRadius: 20, marginHorizontal: 4 }}>
+                      <Text style={{ color: '#fff', fontWeight: '700' }}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             );
           }) : (

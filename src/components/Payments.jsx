@@ -238,7 +238,7 @@ const Payments = () => {
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid w-full gap-4 max-w-[640px] sm:max-w-[720px] mx-auto md:mx-0 md:max-w-none md:grid-cols-3">
       <div className="md:col-span-2 space-y-4">
         <FeaturePanelCard
           title="Payment Management"

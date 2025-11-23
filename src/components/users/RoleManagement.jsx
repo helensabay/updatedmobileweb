@@ -1,11 +1,11 @@
 import React from 'react';
 import { Edit, ShieldCheck } from 'lucide-react';
-import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import { Button } from '@/components/ui/button';
+import UserManagementCard from './UserManagementCard';
 
 export const RoleManagement = ({ roles, onConfigureRole }) => {
   return (
-    <FeaturePanelCard
+    <UserManagementCard
       title="Role Management"
       titleStyle="accent"
       titleIcon={ShieldCheck}
@@ -36,6 +36,6 @@ export const RoleManagement = ({ roles, onConfigureRole }) => {
           </div>
         ))}
       </div>
-    </FeaturePanelCard>
+    </UserManagementCard>
   );
 };

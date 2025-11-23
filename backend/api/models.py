@@ -4,6 +4,8 @@ from uuid import uuid4
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.hashers import make_password, check_password
+from accounts.models import AppUserManager  # <-- import the manager
 
 try:
     from .storage import PrivateMediaStorage
@@ -31,13 +33,17 @@ class AppUser(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(blank=True, null=True)
     email_verified = models.BooleanField(default=False)
-
+    is_active = models.BooleanField(default=True)
+    objects = AppUserManager()  # make sure AppUserManager is defined above
+ 
     class Meta:
         db_table = "app_user"
         indexes = [
             models.Index(fields=["role", "status"], name="app_user_role_status_idx"),
         ]
 
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
     @property
     def is_authenticated(self) -> bool:
         return True
@@ -49,7 +55,13 @@ class AppUser(models.Model):
     def __str__(self) -> str:
         return f"{self.email} ({self.role})"
 
+    def set_password(self, raw_password):
+        """Hash the password and store it."""
+        self.password_hash = make_password(raw_password)
 
+    def check_password(self, raw_password):
+        """Check a raw password against the stored hash."""
+        return check_password(raw_password, self.password_hash)
 def _headshot_upload_path(instance, filename):
     # Store under a per-user folder with a random filename; keep extension if present
     base, ext = os.path.splitext(filename or "")
@@ -1038,7 +1050,9 @@ class Order(models.Model):
     auto_advance_paused = models.BooleanField(default=False)
     auto_advance_pause_reason = models.CharField(max_length=255, blank=True)
     auto_advance_duration_seconds = models.PositiveIntegerField(default=40)
-
+    credit_points_used = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    use_credit_points = models.BooleanField(default=False)
+    credit_points_before = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1099,6 +1113,8 @@ class OrderItem(models.Model):
     allergens = models.JSONField(default=list, blank=True)
     notes = models.CharField(max_length=255, blank=True)
     meta = models.JSONField(default=dict, blank=True)
+    size = models.CharField(max_length=50, null=True, blank=True)
+    customize = models.TextField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

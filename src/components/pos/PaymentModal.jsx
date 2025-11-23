@@ -142,11 +142,11 @@ const PaymentModal = ({
               <Input
                 id="payment-amount"
                 type="text"
+                inputMode="decimal"
                 placeholder="0.00"
                 value={paymentAmount}
                 onChange={handlePaymentAmountChange}
                 className="text-lg text-center"
-                readOnly
               />
             </div>
 

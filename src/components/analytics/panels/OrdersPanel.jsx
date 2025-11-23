@@ -392,99 +392,108 @@ export default function OrdersPanel() {
               Daily order counts compared with collected revenue
             </CardDescription>
           </CardHeader>
-          <CardContent className="h-72 relative">
+          <CardContent className="relative">
             {dailyOrders.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <AlertCircle className="h-12 w-12 mb-3 opacity-50" />
                 <p className="text-sm font-medium">No order data available</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  data={dailyOrders}
-                  margin={{ left: 8, right: 24 }}
-                  {...ANIMATION_CONFIG.entrance}
-                >
-                  <defs>
-                    {ordersGradient.definition}
-                    {revenueGradient.definition}
-                    <filter id="ordersShadow" height="200%">
-                      <feDropShadow
-                        dx="0"
-                        dy="2"
-                        stdDeviation="3"
-                        floodOpacity="0.25"
+              <div className="relative -mx-2 overflow-x-auto pb-2 sm:mx-0 sm:overflow-visible">
+                <div className="h-[260px] min-w-[520px] sm:min-w-0 sm:h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart
+                      data={dailyOrders}
+                      margin={{ left: 8, right: 24 }}
+                      {...ANIMATION_CONFIG.entrance}
+                    >
+                      <defs>
+                        {ordersGradient.definition}
+                        {revenueGradient.definition}
+                        <filter id="ordersShadow" height="200%">
+                          <feDropShadow
+                            dx="0"
+                            dy="2"
+                            stdDeviation="3"
+                            floodOpacity="0.25"
+                          />
+                        </filter>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray={CHART_STYLES.grid.strokeDasharray}
+                        opacity={CHART_STYLES.grid.opacity}
                       />
-                    </filter>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray={CHART_STYLES.grid.strokeDasharray}
-                    opacity={CHART_STYLES.grid.opacity}
-                  />
-                  <XAxis dataKey="name" tick={CHART_STYLES.axisTick} />
-                  <YAxis
-                    yAxisId="left"
-                    tick={CHART_STYLES.axisTick}
-                    width={60}
-                    tickFormatter={(value) => formatCompactCurrency(value)}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={CHART_STYLES.axisTick}
-                    width={50}
-                    tickFormatter={(value) => formatNumber(value, true)}
-                  />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (!active || !payload || !payload.length) return null;
-                      return (
-                        <div style={CHART_STYLES.tooltip.contentStyle}>
-                          <p style={CHART_STYLES.tooltip.labelStyle}>{label}</p>
-                          {payload.map((entry, index) => (
-                            <p
-                              key={`tooltip-item-${index}`}
-                              style={{
-                                ...CHART_STYLES.tooltip.itemStyle,
-                                color: entry.color,
-                              }}
-                            >
-                              <span className="font-medium">{entry.name}:</span>{' '}
-                              <span className="font-semibold">
-                                {entry.name === 'Revenue'
-                                  ? formatCurrency(entry.value)
-                                  : formatNumber(entry.value)}
-                              </span>
-                            </p>
-                          ))}
-                        </div>
-                      );
-                    }}
-                  />
-                  <Legend wrapperStyle={CHART_STYLES.legend.wrapperStyle} />
-                  <Bar
-                    yAxisId="left"
-                    dataKey="revenue"
-                    name="Revenue"
-                    fill={`url(#${revenueGradient.id})`}
-                    stroke="#f97316"
-                    strokeWidth={1}
-                    radius={[8, 8, 0, 0]}
-                    maxBarSize={52}
-                    filter="url(#ordersShadow)"
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="orders"
-                    name="Orders"
-                    stroke="#22c55e"
-                    strokeWidth={2.5}
-                    dot={{ r: 4, fill: '#22c55e' }}
-                    activeDot={{ r: 6, fill: '#22c55e' }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+                      <XAxis dataKey="name" tick={CHART_STYLES.axisTick} />
+                      <YAxis
+                        yAxisId="left"
+                        tick={CHART_STYLES.axisTick}
+                        width={60}
+                        tickFormatter={(value) => formatCompactCurrency(value)}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        tick={CHART_STYLES.axisTick}
+                        width={50}
+                        tickFormatter={(value) => formatNumber(value, true)}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload || !payload.length)
+                            return null;
+                          return (
+                            <div style={CHART_STYLES.tooltip.contentStyle}>
+                              <p style={CHART_STYLES.tooltip.labelStyle}>
+                                {label}
+                              </p>
+                              {payload.map((entry, index) => (
+                                <p
+                                  key={`tooltip-item-${index}`}
+                                  style={{
+                                    ...CHART_STYLES.tooltip.itemStyle,
+                                    color: entry.color,
+                                  }}
+                                >
+                                  <span className="font-medium">
+                                    {entry.name}:
+                                  </span>{' '}
+                                  <span className="font-semibold">
+                                    {entry.name === 'Revenue'
+                                      ? formatCurrency(entry.value)
+                                      : formatNumber(entry.value)}
+                                  </span>
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend wrapperStyle={CHART_STYLES.legend.wrapperStyle} />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="revenue"
+                        name="Revenue"
+                        fill={`url(#${revenueGradient.id})`}
+                        stroke="#f97316"
+                        strokeWidth={1}
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={52}
+                        filter="url(#ordersShadow)"
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="orders"
+                        name="Orders"
+                        stroke="#22c55e"
+                        strokeWidth={2.5}
+                        dot={{ r: 4, fill: '#22c55e' }}
+                        activeDot={{ r: 6, fill: '#22c55e' }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

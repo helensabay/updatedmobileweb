@@ -16,9 +16,23 @@ from . import views_reports as rpt_views
 from . import views_cash as cash_views
 from . import views_diag as diag_views
 from . import views_catering as catering_views
+from django.urls import path, include
 
 urlpatterns = [
-    path("health/", auth_views.health, name="health"),
+    path('orders/', include('orders.urls')),  # include the orders app urls
+    path('api/feedback/', include('feedback.urls')),
+
+    path('orders/', include('orders.urls')),
+    path('api/orders/', include('orders.urls')),
+    path('api/', include('orders.urls')),
+    path('api/', include('notifications.urls')),
+    path('api/notifications/', include('notifications.urls')),  # ⚠️ This line is required
+    path('api/', include('menu.urls')),
+    path('menu/', include('menu.urls')),
+    path('api/accounts/', include('accounts.urls')),  # 👈 key
+    path('api/menu/', include('menu.urls')),   # ✅ add this line
+    path('api/accounts/', include('accounts.urls')),  # registration, login, etc.
+     path("health/", auth_views.health, name="health"),
     path("health/db", auth_views.health_db, name="health_db"),
     path("auth/login", auth_views.auth_login, name="auth_login"),
     path("auth/login/resend-otp", auth_views.auth_login_resend_otp, name="auth_login_resend_otp"),

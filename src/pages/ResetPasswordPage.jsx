@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import Header from '@/components/auth/Header';
 import PageTransition from '@/components/PageTransition';
+import AuthCard from '@/components/auth/AuthCard';
+import AuthPageShell, {
+  AUTH_PAGE_DEFAULT_BACKGROUND,
+} from '@/components/auth/AuthPageShell';
+import AuthBrandIntro from '@/components/auth/AuthBrandIntro';
 import authService from '@/api/services/authService';
 
 const Spinner = () => (
   <svg
-    className="animate-spin -ml-1 mr-3 h-5 w-5"
+    className="animate-spin -ml-1 mr-3 h-4 w-4 sm:h-5 sm:w-5"
     xmlns="http://www.w3.org/2000/svg"
     fill="none"
     viewBox="0 0 24 24"
@@ -92,137 +96,208 @@ const ResetPasswordPage = () => {
     }
   };
 
+  const introContent = (
+    <AuthBrandIntro
+      title="Create a new password"
+      description="Choose a strong password to keep your account secure before returning to the dashboard."
+      className="w-full max-w-xl px-3 sm:px-6 lg:px-8"
+      contentClassName="space-y-1 sm:space-y-3 text-center sm:text-left"
+      titleClassName="text-[20px] sm:text-4xl"
+      descriptionClassName="text-[9px] sm:text-sm"
+    />
+  );
+
+  const resetCard = (
+    <AuthCard
+      title="Reset Password"
+      compact
+      className="!max-w-full sm:!max-w-md lg:!max-w-lg"
+      cardClassName="shadow-2xl lg:p-8"
+    >
+      <p className="text-xs sm:text-sm text-gray-600 mb-4 leading-relaxed max-w-prose">
+        Choose a new password for your account.
+      </p>
+
+      {(error || success) && (
+        <div
+          className={`p-3 sm:p-4 mb-4 rounded-lg text-xs sm:text-sm leading-relaxed ${
+            success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}
+          role="alert"
+          tabIndex={-1}
+          ref={alertRef}
+        >
+          {success || error}
+        </div>
+      )}
+
+      <form
+        onSubmit={onSubmit}
+        className="space-y-4 sm:space-y-5 lg:space-y-6"
+        noValidate
+        aria-busy={pending || undefined}
+      >
+        {!token && (
+          <>
+            <div className="relative">
+              <input
+                id="reset-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder=" "
+                className="peer w-full h-12 sm:h-11 px-3 sm:px-4 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all"
+                required
+                disabled={pending}
+                autoComplete="username email"
+              />
+              <label
+                htmlFor="reset-email"
+                className="absolute left-3 text-muted-foreground pointer-events-none transition-all
+                  top-0 -translate-y-1/2 text-[0.7rem] sm:text-xs px-1 bg-white
+                  peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:px-0
+                  peer-focus:top-0 peer-focus:-translate-y-1/2 peer-focus:text-xs peer-focus:px-1 peer-focus:bg-white"
+              >
+                Email
+              </label>
+            </div>
+            <div className="relative">
+              <input
+                id="reset-code"
+                type="text"
+                value={code}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\s+/g, '').slice(0, 6))
+                }
+                placeholder=" "
+                className="peer w-full h-12 sm:h-11 px-3 sm:px-4 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all"
+                required
+                disabled={pending}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+              />
+              <label
+                htmlFor="reset-code"
+                className="absolute left-3 text-muted-foreground pointer-events-none transition-all
+                  top-0 -translate-y-1/2 text-[0.7rem] sm:text-xs px-1 bg-white
+                  peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:px-0
+                  peer-focus:top-0 peer-focus:-translate-y-1/2 peer-focus:text-xs peer-focus:px-1 peer-focus:bg-white"
+              >
+                6-digit code
+              </label>
+            </div>
+          </>
+        )}
+        <div className="relative">
+          <input
+            id="reset-password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder=" "
+            className="peer w-full h-12 sm:h-11 px-3 sm:px-4 pr-12 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all"
+            required
+            minLength={8}
+            disabled={pending}
+            autoComplete="new-password"
+          />
+          <label
+            htmlFor="reset-password"
+            className="absolute left-3 text-muted-foreground pointer-events-none transition-all
+              top-0 -translate-y-1/2 text-[0.7rem] sm:text-xs px-1 bg-white
+              peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:px-0
+              peer-focus:top-0 peer-focus:-translate-y-1/2 peer-focus:text-xs peer-focus:px-1 peer-focus:bg-white"
+          >
+            New password
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-[0.7rem] sm:text-xs text-gray-500 hover:text-gray-700 focus:outline-none px-2 py-1"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
+
+        <div className="relative">
+          <input
+            id="reset-confirm"
+            type={showConfirm ? 'text' : 'password'}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder=" "
+            className="peer w-full h-12 sm:h-11 px-3 sm:px-4 pr-12 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all"
+            required
+            minLength={8}
+            disabled={pending}
+            autoComplete="new-password"
+          />
+          <label
+            htmlFor="reset-confirm"
+            className="absolute left-3 text-muted-foreground pointer-events-none transition-all
+              top-0 -translate-y-1/2 text-[0.7rem] sm:text-xs px-1 bg-white
+              peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:px-0
+              peer-focus:top-0 peer-focus:-translate-y-1/2 peer-focus:text-xs peer-focus:px-1 peer-focus:bg-white"
+          >
+            Confirm new password
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowConfirm(!showConfirm)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-[0.7rem] sm:text-xs text-gray-500 hover:text-gray-700 focus:outline-none px-2 py-1"
+            aria-label={showConfirm ? 'Hide password' : 'Show password'}
+          >
+            {showConfirm ? 'Hide' : 'Show'}
+          </button>
+        </div>
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="w-full bg-primary hover:bg-primary-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3.5 sm:py-3 md:py-3.5 px-4 rounded-md text-base sm:text-lg transition-colors duration-300 inline-flex items-center justify-center gap-2"
+        >
+          {pending ? (
+            <>
+              <Spinner /> Resetting...
+            </>
+          ) : (
+            'Reset Password'
+          )}
+        </button>
+      </form>
+
+      <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm">
+        <Link
+          to="/login"
+          className="text-primary underline underline-offset-2 font-semibold text-center sm:text-left"
+        >
+          Back to Login
+        </Link>
+        <button
+          className="text-primary hover:text-primary-dark text-center sm:text-right"
+          onClick={() => navigate('/forgot-password')}
+          type="button"
+        >
+          Resend link
+        </button>
+      </div>
+    </AuthCard>
+  );
+
   return (
     <PageTransition>
-      <div className="min-h-screen flex flex-col bg-white">
-        <Header />
-        <main className="flex-1 flex items-center justify-center px-4 py-10">
-          <div className="w-full max-w-md bg-white p-6 rounded-xl shadow-lg">
-            <h1 className="text-2xl font-semibold mb-2">Reset Password</h1>
-            <p className="text-sm text-gray-600 mb-4">
-              Choose a new password for your account.
-            </p>
-
-            {(error || success) && (
-              <div
-                className={`p-3 mb-4 rounded-lg text-sm ${
-                  success
-                    ? 'bg-green-50 text-green-700'
-                    : 'bg-red-50 text-red-700'
-                }`}
-                role="alert"
-                tabIndex={-1}
-                ref={alertRef}
-              >
-                {success || error}
-              </div>
-            )}
-
-            <form
-              onSubmit={onSubmit}
-              className="space-y-4"
-              noValidate
-              aria-busy={pending || undefined}
-            >
-              {!token && (
-                <>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Email"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
-                    required
-                    disabled={pending}
-                  />
-                  <input
-                    type="text"
-                    value={code}
-                    onChange={(e) =>
-                      setCode(e.target.value.replace(/\s+/g, '').slice(0, 6))
-                    }
-                    placeholder="6-digit code"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
-                    required
-                    disabled={pending}
-                  />
-                </>
-              )}
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="New password"
-                  className="w-full p-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
-                  required
-                  minLength={8}
-                  disabled={pending}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-
-              <div className="relative">
-                <input
-                  type={showConfirm ? 'text' : 'password'}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="Confirm new password"
-                  className="w-full p-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
-                  required
-                  minLength={8}
-                  disabled={pending}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  aria-label={showConfirm ? 'Hide password' : 'Show password'}
-                >
-                  {showConfirm ? 'Hide' : 'Show'}
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={pending}
-                className="w-full bg-primary hover:bg-primary-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors inline-flex items-center justify-center"
-              >
-                {pending ? (
-                  <>
-                    <Spinner /> Resetting…
-                  </>
-                ) : (
-                  'Reset Password'
-                )}
-              </button>
-            </form>
-
-            <div className="mt-4 flex items-center justify-between text-sm">
-              <Link
-                to="/login"
-                className="text-primary underline underline-offset-2"
-              >
-                Back to Login
-              </Link>
-              <button
-                className="text-gray-500 hover:text-gray-700"
-                onClick={() => navigate('/forgot-password')}
-                type="button"
-              >
-                Resend link
-              </button>
-            </div>
-          </div>
-        </main>
-      </div>
+      <AuthPageShell
+        backgroundImage={AUTH_PAGE_DEFAULT_BACKGROUND}
+        waveImage="/images/b1bc6b54-fe3f-45eb-8a39-005cc575deef.png"
+        paddingClassName="px-4 sm:px-6 lg:px-10 xl:px-16 py-10 sm:py-12 lg:py-16"
+        gridClassName="gap-2 sm:gap-10 lg:gap-16"
+        formWrapperClassName="order-2 md:order-1 w-full flex justify-center px-2 sm:px-4 md:px-0"
+        asideWrapperClassName="order-1 md:order-2 mb-2 sm:mb-0 flex justify-center px-2 sm:px-4"
+        formSlot={resetCard}
+        asideSlot={introContent}
+      />
     </PageTransition>
   );
 };
