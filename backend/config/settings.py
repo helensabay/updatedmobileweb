@@ -47,7 +47,7 @@ INSTALLED_APPS = [
     'notifications.apps.NotificationsConfig',
 
     'feedback',  # ✅ add this
-
+    'catering',
 
 ]
 MEDIA_URL = '/media/'

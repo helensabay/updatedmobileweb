@@ -12,6 +12,13 @@ try:
 except Exception:  # fallback if storage cannot be imported during migrations
     PrivateMediaStorage = None
 
+class Offer(models.Model):
+    name = models.CharField(max_length=255)
+    required_points = models.PositiveIntegerField()
+    # add other fields as needed
+
+    def __str__(self):
+        return self.name
 
 class AppUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
@@ -35,7 +42,8 @@ class AppUser(models.Model):
     email_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     objects = AppUserManager()  # make sure AppUserManager is defined above
- 
+    reset_code = models.CharField(max_length=128, blank=True, null=True)
+    reset_code_expiry = models.DateTimeField(blank=True, null=True) 
     class Meta:
         db_table = "app_user"
         indexes = [
@@ -850,6 +858,8 @@ class MenuItem(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     available = models.BooleanField(default=True)
     archived = models.BooleanField(default=False)
+    is_special = models.BooleanField(default=False)  # <-- add this
+
     archived_at = models.DateTimeField(blank=True, null=True)
     image = models.ImageField(upload_to="menu_items/", blank=True, null=True)
     ingredients = models.JSONField(default=list, blank=True)

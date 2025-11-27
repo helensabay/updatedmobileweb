@@ -52,11 +52,11 @@ export default function AccountLoginScreen() {
   // ✅ Google Auth Config
   const googleConfig = {
     expoClientId:
-      '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
+      '286008841345-f316kiittefdfi03ns17jljlc14urr2k.apps.googleusercontent.com',
     androidClientId:
       '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
     webClientId:
-      '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
+      '286008841345-f316kiittefdfi03ns17jljlc14urr2k.apps.googleusercontent.com',
     responseType: 'id_token',
     scopes: ['profile', 'email'],
     selectAccount: true,
@@ -141,7 +141,7 @@ const handleLogin = async () => {
     setUser(profile);
 
     Alert.alert('Success', 'Login successful!', [
-      { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
+      { text: 'Continue', onPress: () => router.replace('/biometric-face-enrollment') },
     ]);
 
   } catch (error) {
@@ -189,8 +189,9 @@ const handleLogin = async () => {
         setUser(profile);
 
         Alert.alert('Success', 'Login successful!', [
-          { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
+          { text: 'Continue', onPress: () => router.replace('/biometric-face-enrollment') },
         ]);
+
       } else {
         Alert.alert(
           'Google Login Failed',
@@ -337,9 +338,10 @@ const handleLogin = async () => {
             </TouchableOpacity>
 
             {/* Links */}
-            <TouchableOpacity onPress={() => router.push('/account-password')}>
-              <Text style={styles.linkText}>Forgot Password?</Text>
-            </TouchableOpacity>
+           <TouchableOpacity onPress={() => router.push('/account-password-reset')}>
+            <Text style={styles.linkText}>Forgot Password?</Text>
+          </TouchableOpacity>
+
             <TouchableOpacity onPress={() => router.push('/account-registration')}>
               <Text style={styles.linkText}>
                 Don’t have an account?{' '}

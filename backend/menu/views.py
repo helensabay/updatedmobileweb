@@ -39,3 +39,12 @@ def menu_item_image(request, item_id):
     if not item.image:
         return Response({'error': 'No image found'}, status=404)
     return Response({'image_url': item.image.url})
+from .models import MenuCategory
+from .serializers import MenuCategorySerializer
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def categories_list(request):
+    categories = MenuCategory.objects.all()
+    serializer = MenuCategorySerializer(categories, many=True)
+    return Response(serializer.data)

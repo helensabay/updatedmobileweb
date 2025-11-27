@@ -115,6 +115,50 @@ export async function storeTokens({ accessToken, refreshToken }) {
 export async function clearStoredTokens() {
   await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_CACHE_KEY]);
 }
+// api.js — improved createCateringEvent
+export const createCateringEvent = async (payload) => {
+  try {
+    // Log payload for debugging
+    console.log("📤 Sending Catering Event payload:", JSON.stringify(payload, null, 2));
+
+    // Get valid token (refresh if expired)
+    const token = await getValidToken();
+    if (!token) throw new Error("No valid token. Please log in again.");
+
+    // POST request to backend
+    const response = await api.post("/catering-events/", payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log("✅ Catering event created:", response.data);
+    return { success: true, data: response.data };
+  } catch (err) {
+    // Detailed logging
+    console.error("❌ createCateringEvent error:", {
+      message: err.message,
+      responseData: err.response?.data,
+      status: err.response?.status,
+    });
+
+    // DRF validation errors are usually objects, convert them to readable string
+    let errorMsg = "Network or server error";
+    if (err.response?.data) {
+      if (typeof err.response.data === "string") {
+        errorMsg = err.response.data;
+      } else if (typeof err.response.data === "object") {
+        // Flatten object errors
+        errorMsg = Object.entries(err.response.data)
+          .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(", ") : val}`)
+          .join("\n");
+      }
+    }
+
+    return { success: false, message: errorMsg };
+  }
+};
 
 // --------------------
 // Auth APIs
@@ -308,16 +352,26 @@ return { success: false, message: err.message || 'Network or server error.' };
 }
 };
 
-
-export const fetchGcashQR = async (orderId) => {
+// --------------------
+// Fetch GCash QR
+// --------------------
+export const fetchGcashQR = async (orderNumber) => {
   try {
-    const res = await axios.get(`${API_URL}/orders/${orderId}/gcash_qr/`);
-    return res.data; // { success: true, qr_url: "..." }
+    const token = await getValidToken(); // get valid token if needed
+    if (!token) throw new Error('No valid token found. Please log in again.');
+
+    const res = await api.get(`/orders/${orderNumber}/gcash_qr/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    // expected response: { success: true, qr_url: '...', total_amount: ... }
+    return res.data;
   } catch (err) {
-    console.log('Error fetching GCash QR', err);
-    return { success: false };
+    console.error("fetchGcashQR error:", err.response?.data || err.message);
+    return { success: false, message: err.response?.data?.message || err.message };
   }
 };
+
 const changePassword = async () => {
   try {
     const token = await getValidToken();
@@ -364,8 +418,38 @@ const pickImage = async () => {
     }
   }
 };
+
+// --------------------
+// Request Password Reset
+// --------------------
+export const requestPasswordReset = async ({ email }) => {
+  try {
+    const response = await axios.post(`${API_BASE}/password-reset/`, { email });
+    return response;
+  } catch (error) {
+    console.error('requestPasswordReset error:', error.response || error.message);
+    return error.response || { data: { message: 'Network error' } };
+  }
+};
+
+// --------------------
+// Confirm Reset Code & Set New Password
+// --------------------
+export const confirmPasswordReset = async ({ email, reset_code, new_password }) => {
+  try {
+    const response = await axios.post(`${API_BASE}/password-reset/confirm/`, {
+      email,
+      reset_code,
+      new_password,
+    });
+    return response;
+  } catch (error) {
+    console.error('confirmPasswordReset error:', error.response || error.message);
+    return error.response || { data: { message: 'Network error' } };
+  }
+};
 export async function fetchCategories() {
-  const res = await fetch(`${API_URL}/categories/`);
+  const res = await fetch(`${BASE_URL}/menu/categories/`);
   if (!res.ok) throw new Error("Failed to fetch categories");
   return await res.json();
 }
@@ -529,8 +613,13 @@ export const removeCartItem = async (itemId) => {
 export const fetchUserOrders = async () => {
   try {
     const res = await api.get(`/orders/`);
-    if (res.data.success) {
-      return res.data.orders || [];
+    // If backend just returns a list of orders, return it directly
+    if (Array.isArray(res.data)) {
+      return res.data;
+    }
+    // Optional: handle wrapped response like { orders: [...] }
+    if (res.data.orders) {
+      return res.data.orders;
     }
     return [];
   } catch (err) {
@@ -538,6 +627,7 @@ export const fetchUserOrders = async () => {
     return [];
   }
 };
+
 export const getCreditPoints = async () => {
 try {
 const res = await api.get('/orders/user-credit-points/');
@@ -566,16 +656,18 @@ api.interceptors.response.use(
 // --------------------
 // Fetch order details (status + items)
 // --------------------
-export const fetchOrderDetails = async (orderId) => {
+const fetchOrders = async () => {
   try {
-    const res = await api.get(`/orders/${orderId}/status/`);
-    return {
-      status: res.data.status,
-      items: res.data.items || [],
-    };
+    const token = await getValidToken();
+    const res = await api.get('/orders/', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.data.success) {
+      setOrders(res.data.orders);
+      // res.data.orders[i].status will now always be: pending, in_prep, in_progress, ready, completed
+    }
   } catch (err) {
-    console.error('fetchOrderDetails error:', err.response?.data || err.message);
-    throw err;
+    console.error(err);
   }
 };
 

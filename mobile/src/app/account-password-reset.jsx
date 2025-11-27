@@ -19,11 +19,14 @@ import {
   Roboto_900Black,
 } from '@expo-google-fonts/roboto';
 
-import { requestPasswordReset } from '../api/api';
+import { requestPasswordReset, confirmPasswordReset } from '../api/api';
 
 export default function AccountPasswordResetScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [resetStep, setResetStep] = useState(1); // 1 = enter email, 2 = enter code + new password
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -35,7 +38,8 @@ export default function AccountPasswordResetScreen() {
   });
   if (!fontsLoaded) return null;
 
-  const handleReset = async () => {
+  // Step 1: Request reset code
+  const handleRequestReset = async () => {
     if (!/\S+@\S+\.\S+/.test(email)) {
       setError('Please enter a valid email');
       return;
@@ -44,16 +48,45 @@ export default function AccountPasswordResetScreen() {
     setLoading(true);
 
     try {
-      const data = await requestPasswordReset({ email: email.trim() });
-
-      if (data && data.data) {
-        Alert.alert(
-          'Reset Email Sent',
-          `A reset code has been sent to ${email}. Check your email.`
-        );
-        router.push('/ResetPasswordScreen', { email }); // Navigate if you have a reset screen
+      const response = await requestPasswordReset({ email: email.trim() });
+      if (response?.data?.message) {
+        Alert.alert('Reset Email Sent', `A reset code has been sent to ${email}`);
+        setResetStep(2); // Move to next step
       } else {
-        Alert.alert('Error', data.message || 'Email does not exist');
+        Alert.alert('Error', response?.data?.message || 'Email not found');
+      }
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Network error or server unreachable');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 2: Confirm code & set new password
+  const handleConfirmReset = async () => {
+    if (!resetCode || !newPassword) {
+      setError('Please fill all fields');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await confirmPasswordReset({
+        email: email.trim(),
+        reset_code: resetCode.trim(),
+        new_password: newPassword,
+      });
+      if (response?.data?.message) {
+        Alert.alert('Success', response.data.message);
+          router.push('/account-login');
+      } else {
+        Alert.alert('Error', response?.data?.message || 'Reset failed');
       }
     } catch (err) {
       console.error(err);
@@ -73,7 +106,6 @@ export default function AccountPasswordResetScreen() {
         colors={['rgba(255,255,255,0.6)', 'rgba(255,255,255,0.3)']}
         style={StyleSheet.absoluteFillObject}
       />
-
       <KeyboardAwareScrollView
         contentContainerStyle={styles.scrollContainer}
         enableOnAndroid
@@ -82,37 +114,75 @@ export default function AccountPasswordResetScreen() {
         <View style={styles.container}>
           <Text style={styles.title}>Forgot Password</Text>
           <Text style={styles.subtitle}>
-            Enter your email to reset your password
+            {resetStep === 1
+              ? 'Enter your email to reset your password'
+              : 'Enter the code sent to your email and your new password'}
           </Text>
 
           <View style={styles.card}>
-            {/* Email Input */}
-            <View style={styles.inputWrapper}>
-              <MaterialCommunityIcons
-                name="email-outline"
-                size={20}
-                color="#888"
-              />
-              <TextInput
-                placeholder="Email Address"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-                style={styles.input}
-              />
-            </View>
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {resetStep === 1 ? (
+              <>
+                {/* Email Input */}
+                <View style={styles.inputWrapper}>
+                  <MaterialCommunityIcons name="email-outline" size={20} color="#888" />
+                  <TextInput
+                    placeholder="Email Address"
+                    keyboardType="email-address"
+                    value={email}
+                    onChangeText={setEmail}
+                    style={styles.input}
+                  />
+                </View>
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-            {/* Reset Button */}
-            <TouchableOpacity
-              style={styles.button}
-              onPress={handleReset}
-              disabled={loading}
-            >
-              <Text style={styles.buttonText}>
-                {loading ? 'Sending...' : 'Reset Password'}
-              </Text>
-            </TouchableOpacity>
+                {/* Reset Button */}
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={handleRequestReset}
+                  disabled={loading}
+                >
+                  <Text style={styles.buttonText}>
+                    {loading ? 'Sending...' : 'Send Reset Code'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {/* Reset Code Input */}
+                <View style={styles.inputWrapper}>
+                  <MaterialCommunityIcons name="key-outline" size={20} color="#888" />
+                  <TextInput
+                    placeholder="Reset Code"
+                    value={resetCode}
+                    onChangeText={setResetCode}
+                    style={styles.input}
+                  />
+                </View>
+                {/* New Password Input */}
+                <View style={styles.inputWrapper}>
+                  <MaterialCommunityIcons name="lock-outline" size={20} color="#888" />
+                  <TextInput
+                    placeholder="New Password"
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    secureTextEntry
+                    style={styles.input}
+                  />
+                </View>
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                {/* Confirm Button */}
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={handleConfirmReset}
+                  disabled={loading}
+                >
+                  <Text style={styles.buttonText}>
+                    {loading ? 'Submitting...' : 'Reset Password'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             {/* Back to Login */}
             <View
@@ -124,9 +194,7 @@ export default function AccountPasswordResetScreen() {
             >
               <Text style={{ color: '#666' }}>Remembered your password? </Text>
               <TouchableOpacity onPress={() => router.push('/account-login')}>
-                <Text
-                  style={{ color: '#FF8C00', fontFamily: 'Roboto_700Bold' }}
-                >
+                <Text style={{ color: '#FF8C00', fontFamily: 'Roboto_700Bold' }}>
                   Login
                 </Text>
               </TouchableOpacity>

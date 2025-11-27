@@ -1,3 +1,4 @@
+// app/(tabs)/home-dashboard.jsx
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
@@ -27,50 +28,44 @@ import Recommended from '../../components/Recommended';
 import { fetchMenuItems, fetchNotifications } from '../../api/api';
 import { useCart } from '../../context/CartContext';
 
-const CATEGORY_IMAGES = {
-  combo: require('../../../assets/choices/combo.png'),
-  meals: require('../../../assets/choices/meals.png'),
-  snacks: require('../../../assets/choices/snacks.png'),
-  drinks: require('../../../assets/choices/drinks.png'),
-};
-
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const router = useRouter();
   const { cart, addToCart, decreaseQuantity } = useCart();
 
   const [menuItems, setMenuItems] = useState([]);
-  const [prevMenuItems, setPrevMenuItems] = useState([]);
   const [menuNotifications, setMenuNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
-  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
-  const FIXED_CATEGORIES = [
-    { key: 'combo', title: 'Combo Meals', image: CATEGORY_IMAGES.combo },
-    { key: 'meals', title: 'Meals', image: CATEGORY_IMAGES.meals },
-    { key: 'snacks', title: 'Snacks', image: CATEGORY_IMAGES.snacks },
-    { key: 'drinks', title: 'Drinks', image: CATEGORY_IMAGES.drinks },
-  ];
+  // Load user role
+  useEffect(() => {
+    const getUserRole = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('@sanaol/auth/user');
+        if (userData) {
+          const parsed = JSON.parse(userData);
+          setUserRole(parsed.role); // expects "faculty" or "student"
+        } else {
+          setUserRole('student'); // fallback
+        }
+      } catch (err) {
+        console.error('Failed to get user role', err);
+        setUserRole('student');
+      }
+    };
+    getUserRole();
+  }, []);
 
-  const CATEGORY_MAP = {
-    combo: 'Combo Meals',
-    meals: 'Meals',
-    snacks: 'Snacks',
-    drinks: 'Drinks',
-  };
-
-  // ----------------------
   // Load menu items & notifications
-  // ----------------------
   const loadMenuItems = async () => {
     try {
       setLoading(true);
-      const items = await fetchMenuItems(); // fetch all items from DB
-      setMenuItems(items); // store all items
-      setPrevMenuItems(items);
+      const items = await fetchMenuItems();
+      setMenuItems(items || []);
     } catch (err) {
       console.error('Error fetching menu items:', err);
     } finally {
@@ -111,48 +106,79 @@ export default function HomeDashboardScreen() {
     loadAllData().finally(() => setRefreshing(false));
   }, []);
 
-  // ----------------------
-  // Category & item filtering
-  // ----------------------
+  // Group categories from backend
   const categoriesData = useMemo(() => {
-    return FIXED_CATEGORIES.map(cat => {
-      const itemCount = menuItems.filter(
-        item => (item.category || '') === CATEGORY_MAP[cat.key]
-      ).length;
-      return { ...cat, itemCount };
+    const categoryMap = {};
+    menuItems.forEach(item => {
+      const cat = item.category || 'Others';
+      if (!categoryMap[cat]) categoryMap[cat] = { key: cat, title: cat, itemCount: 0, image: item.image };
+      categoryMap[cat].itemCount += 1;
     });
+    return Object.values(categoryMap);
   }, [menuItems]);
 
-  const filteredCategories = useMemo(() => {
-    if (!searchQuery) return categoriesData;
-    return categoriesData.filter(cat =>
-      cat.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [categoriesData, searchQuery]);
+  // Separate Catering if it exists
+  const mainCategories = useMemo(() => {
+    return categoriesData.filter(cat => cat.title.toLowerCase() !== 'catering');
+  }, [categoriesData]);
 
+  const cateringCategory = useMemo(() => {
+    return categoriesData.find(cat => cat.title.toLowerCase() === 'catering') || null;
+  }, [categoriesData]);
+
+  // Filtered categories for display (search + role)
+  const filteredMainCategories = useMemo(() => {
+    let cats = mainCategories;
+
+    if (searchQuery) {
+      cats = cats.filter(cat => cat.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+
+    // Remove Catering if not faculty
+    if (userRole !== 'faculty') {
+      cats = cats.filter(cat => cat.title.toLowerCase() !== 'catering');
+    }
+
+    return cats;
+  }, [mainCategories, searchQuery, userRole]);
+
+  const filteredCatering = useMemo(() => {
+    if (!cateringCategory || userRole !== 'faculty') return null;
+    if (!searchQuery) return cateringCategory;
+    return cateringCategory.title.toLowerCase().includes(searchQuery.toLowerCase())
+      ? cateringCategory
+      : null;
+  }, [cateringCategory, searchQuery, userRole]);
+
+  // All items filtered (removes catering for students)
   const allItemsFiltered = useMemo(() => {
-    if (!searchQuery) return menuItems;
-    return menuItems.filter(item =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [menuItems, searchQuery]);
+    let items = menuItems;
+
+    if (userRole !== 'faculty') {
+      items = items.filter(item => (item.category || '').toLowerCase() !== 'catering');
+    }
+
+    if (searchQuery) {
+      items = items.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+
+    return items;
+  }, [menuItems, searchQuery, userRole]);
+
+  // Grouped items map used if needed later (kept for future)
+  const groupedMenuItems = useMemo(() => {
+    const groups = {};
+    menuItems.forEach(item => {
+      const cat = item.category || 'Others';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(item);
+    });
+    return groups;
+  }, [menuItems]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  if (!fontsLoaded || loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#f97316" />
-        <Text style={{ marginTop: 8, color: '#f97316', fontFamily: 'Roboto_700Bold' }}>
-          Loading Menu...
-        </Text>
-      </View>
-    );
-  }
-
-  // ----------------------
   // Handlers
-  // ----------------------
   const handleLogout = async () => {
     try {
       await AsyncStorage.multiRemove([
@@ -167,6 +193,7 @@ export default function HomeDashboardScreen() {
       Alert.alert('Error', 'Failed to log out. Please try again.');
     }
   };
+
   const handleCheckout = () => router.push('/customer-cart');
   const handleAddMoreItems = () => router.push('/(tabs)');
 
@@ -204,6 +231,20 @@ export default function HomeDashboardScreen() {
       </View>
     </View>
   );
+
+  if (!fontsLoaded || loading || userRole === null) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#f97316" />
+        <Text style={{ marginTop: 8, color: '#f97316', fontFamily: 'Roboto_700Bold' }}>
+          Loading Menu...
+        </Text>
+      </View>
+    );
+  }
+
+  // Helper to create a URL-safe category slug (no spaces)
+  const makeCategorySlug = (title) => encodeURIComponent(title.replace(/\s+/g, ''));
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fef3c7' }}>
@@ -244,18 +285,33 @@ export default function HomeDashboardScreen() {
       >
         <Recommended items={menuItems.slice(0, 6)} />
 
+        {/* Main Categories */}
         {renderCategoriesHeader()}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 8 }}>
-          {filteredCategories.map(item => (
+          {filteredMainCategories.map(item => (
             <CategoryItem
               key={item.key}
               image={item.image}
               title={item.title}
-              onPress={() => router.push(`/categories/${item.title.replace(' ', '')}`)}
+              onPress={() => router.push(`/categories/${makeCategorySlug(item.title)}`)}
             />
           ))}
         </View>
 
+        {/* Catering Section (Faculty Only) */}
+        {userRole === 'faculty' && filteredCatering && (
+          <View style={{ marginTop: 16, paddingHorizontal: 8 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 8 }}>Catering</Text>
+            <CategoryItem
+              key={filteredCatering.key}
+              image={filteredCatering.image}
+              title={filteredCatering.title}
+              onPress={() => router.push(`/categories/${makeCategorySlug(filteredCatering.title)}`)}
+            />
+          </View>
+        )}
+
+        {/* All Menu Items */}
         <View style={{ marginTop: 16, paddingHorizontal: 8 }}>
           <Text style={{ fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 8 }}>All Menu Items</Text>
           {allItemsFiltered.length > 0 ? allItemsFiltered.map(item => {
@@ -306,7 +362,7 @@ export default function HomeDashboardScreen() {
         {openDropdown && <Pressable style={{ position: 'absolute', inset: 0 }} onPress={() => setOpenDropdown(null)} />}
         {openDropdown === 'settings' && renderDropdownContainer(
           <>
-            <DropdownItem icon={<User size={16} color="#374151" />} label="Profile" onPress={() => router.push('/tabs/account-profile')} />
+            <DropdownItem icon={<User size={16} color="#374151" />} label="Profile" onPress={() => router.push('/(tabs)/account-profile')} />
             <DropdownItem icon={<Gear size={16} color="#374151" />} label="App Settings" onPress={() => router.push('/screens/Settings')} />
             <DropdownItem icon={<HelpCircle size={16} color="#374151" />} label="Help" onPress={() => router.push('/screens/FAQs')} />
             <DropdownItem icon={<MessageCircle size={16} color="#374151" />} label="Feedback" onPress={() => router.push('/screens/Feedback')} />
@@ -320,7 +376,7 @@ export default function HomeDashboardScreen() {
               <Text style={{ color:'#6B7280', textAlign:'center', padding:8 }}>No updates</Text>
             ) : (
               <>
-                {(showAllNotifications ? menuNotifications : menuNotifications.slice(-5)).map((n, idx) => (
+                {menuNotifications.slice(-5).map((n, idx) => (
                   <View key={idx} style={{ paddingVertical: 4 }}>
                     <Text style={{
                       color: n.type === 'new' ? '#16a34a' : n.type === 'soldout' ? '#ef4444' : n.type === 'deleted' ? '#9ca3af' : '#374151',
@@ -330,13 +386,6 @@ export default function HomeDashboardScreen() {
                     </Text>
                   </View>
                 ))}
-                {menuNotifications.length > 5 && (
-                  <TouchableOpacity onPress={() => setShowAllNotifications(!showAllNotifications)} style={{ marginTop: 4, padding: 6 }}>
-                    <Text style={{ color:'#f97316', fontWeight:'700', textAlign:'center' }}>
-                      {showAllNotifications ? 'Show Less' : 'See More'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </>
             )}
           </>

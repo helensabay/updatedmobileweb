@@ -1,9 +1,38 @@
 // app/(tabs)/_layout.js
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, ActivityIndicator } from 'react-native';
 
 export default function TabsLayout() {
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const json = await AsyncStorage.getItem('@sanaol/auth/user');
+        if (json) {
+          const user = JSON.parse(json);
+          setRole(user.role); // student / faculty
+        } else {
+          setRole('student'); // fallback
+        }
+      } catch {
+        setRole('student');
+      }
+    };
+    loadUser();
+  }, []);
+
+  if (role === null) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="orange" />
+      </View>
+    );
+  }
+
   return (
     <Tabs
       initialRouteName="home-dashboard"
@@ -12,7 +41,6 @@ export default function TabsLayout() {
         tabBarActiveTintColor: 'orange',
       }}
     >
-      {/* Home tab */}
       <Tabs.Screen
         name="home-dashboard"
         options={{
@@ -23,7 +51,19 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Cart tab */}
+      {/* 👇 Only show Catering tab if FACULTY */}
+      {role === 'faculty' && (
+        <Tabs.Screen
+          name="catering"
+          options={{
+            title: 'Catering',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="restaurant-outline" size={size} color={color} />
+            ),
+          }}
+        />
+      )}
+
       <Tabs.Screen
         name="customer-cart"
         options={{
@@ -34,7 +74,6 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Orders tab */}
       <Tabs.Screen
         name="order-tracking"
         options={{
@@ -45,7 +84,6 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Profile tab */}
       <Tabs.Screen
         name="account-profile"
         options={{

@@ -47,7 +47,7 @@ export default function BiometricFaceEnrollmentScreen() {
 
       if (result.success) {
         Alert.alert('Success', 'Face verified successfully!');
-        router.push('/(tabs)'); // ✅ Navigate to main app
+        router.push('/(tabs)/home-dashboard'); // ✅ Navigate to main app
       } else {
         Alert.alert('Failed', 'Face scan failed. Try again.');
       }

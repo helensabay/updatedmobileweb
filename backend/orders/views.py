@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from decimal import Decimal, ROUND_DOWN
+from .utils import map_order_status  # if you put it in utils.py
 
 from rest_framework import status
 from api.models import Order, OrderItem
@@ -33,26 +34,20 @@ class CreditPointsSerializer(serializers.Serializer):
     credit_points = serializers.DecimalField(max_digits=10, decimal_places=2)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def order_status(request, order_number):  
+def order_status(request, order_number):
     try:
-        # Use 'name' from the user model
-        order = Order.objects.get(
-            order_number=order_number,
-            customer_name=request.user.name   # FIXED
-        )
-
+        order = Order.objects.get(order_number=order_number, customer_name=request.user.name)
         items = [
             {
                 "name": item.item_name,
                 "quantity": item.quantity,
                 "price": float(item.price),
-            }
-            for item in order.items.all()
+            } for item in order.items.all()
         ]
 
         return JsonResponse({
             "success": True,
-            "status": order.status,
+            "status": map_order_status(order.status),
             "items": items
         })
 
@@ -62,11 +57,38 @@ def order_status(request, order_number):
             status=404
         )
 
+
 # api/views.py
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import traceback
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_order(request, order_number):
+    try:
+        order = Order.objects.get(order_number=order_number)
+        items = [
+            {
+                "name": oi.item_name,
+                "price": float(oi.price),
+                "quantity": oi.quantity,
+            } 
+            for oi in order.orderitem_set.all()
+        ]
+
+        return Response({
+            "success": True,
+            "order_number": order.order_number,
+            "order_type": order.order_type,
+            "total_amount": float(order.total_amount),
+            "promised_time": order.promised_time,
+            "status": order.status,
+            "items": items
+        })
+    except Order.DoesNotExist:
+        return Response({"success": False, "message": "Order not found"}, status=404)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_order(request):
@@ -148,51 +170,94 @@ def get_user_orders(request):
 
     serializer = OrderSerializer(orders, many=True)
     return Response({"orders": serializer.data}, status=200)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def user_credit_points(request):
     user = request.user
-    paid_orders = Order.objects.filter(placed_by=user, status='Paid')
+
+    # Get all orders for this user
+    all_orders = Order.objects.filter(placed_by=user)
     
+    # Calculate earned points
     total_earned_points = sum(
-        ((order.total_amount + (order.credit_points_used or 0)) * Decimal('0.01')).quantize(Decimal('0.01'))
-        for order in paid_orders
+        Decimal(order.total_amount) * Decimal('0.01')
+        for order in all_orders
     )
+
+    # Calculate used points
     total_used_points = sum(
-        (order.credit_points_used or Decimal('0.0')).quantize(Decimal('0.01'))
-        for order in paid_orders
+        Decimal(order.credit_points_used or 0)
+        for order in all_orders
     )
-    
-    credit_points = max(total_earned_points - total_used_points, Decimal('0.0'))
+
+    # Ensure Decimal and quantize
+    credit_points = Decimal(max(total_earned_points - total_used_points, Decimal('0.0'))).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+
     serializer = CreditPointsSerializer({'credit_points': credit_points})
     return Response(serializer.data)
 
+@api_view(['GET'])
 @permission_classes([AllowAny])
-def get_order(request, order_number):
+def gcash_link(request, order_number):
     try:
         order = Order.objects.get(order_number=order_number)
-        items = [
-            {
-                "name": oi.item_name,
-                "price": float(oi.price),
-                "quantity": oi.quantity,
-            } for oi in order.orderitem_set.all()
-        ]
-        return Response({
-            "success": True,
-            "order_number": order.order_number,
-            "order_type": order.order_type,
-            "total_amount": float(order.total_amount),
-            "promised_time": order.promised_time,
-            "status": order.status,
-            "items": items
-        })
+        gcash_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
+        return JsonResponse({"success": True, "gcash_url": gcash_url})
     except Order.DoesNotExist:
-        return Response({"success": False, "message": "Order not found"}, status=404)
+        return JsonResponse({"success": False, "message": "Order not found"}, status=404)
 
 # ------------------------------
-# ✅ LIST ALL ORDERS FOR USER
+# ✅ CONFIRM PAYMENT
 # ------------------------------
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def confirm_payment(request, order_number):
+    try:
+        data = request.data
+        method = data.get('method', None)
+        order = Order.objects.get(order_number=order_number)
+
+        order.payment_method = method
+        order.status = "pending"  # start at pending
+        order.save()
+
+        # Optionally, add credit points if needed
+        user = order.placed_by
+        earned_points = order.total_amount * Decimal('0.01')
+        if not hasattr(user, 'credit_points'):
+            user.credit_points = Decimal('0.0')
+        user.credit_points += earned_points
+        user.save()
+
+        return Response({
+            "success": True,
+            "message": "Payment confirmed",
+            "status": map_order_status(order.status),
+            "earned_points": float(earned_points)
+        })
+
+    except Order.DoesNotExist:
+        return Response({"success": False, "message": "Order not found"}, status=404)
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def fetch_gcash_qr(request, order_number):
+    try:
+        order = Order.objects.get(order_number=order_number)
+        qr_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
+
+        return Response({
+            "success": True,
+            "qr_url": qr_url,
+            "total_amount": float(order.total_amount),
+        })
+
+    except Order.DoesNotExist:
+        return Response({
+            "success": False,
+            "message": "Order not found"
+        }, status=404)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_orders(request):
@@ -220,79 +285,166 @@ def list_orders(request):
         })
 
     return Response({"success": True, "orders": orders_data})
-
-# api/views.py
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def fetch_user_orders(request):
-    user_name = request.user.name
-    # Use icontains to include orders with empty/mismatched names
-    orders = Order.objects.filter(customer_name__icontains=user_name).order_by('-created_at')
-    serializer = OrderSerializer(orders, many=True)
-    return Response({"success": True, "orders": serializer.data})
-# ------------------------------
-# ✅ GENERATE GCASH PAYMENT LINK
-# ------------------------------
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def gcash_link(request, order_number):
-    try:
-        order = Order.objects.get(order_number=order_number)
-        gcash_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
-        return JsonResponse({"success": True, "gcash_url": gcash_url})
-    except Order.DoesNotExist:
-        return JsonResponse({"success": False, "message": "Order not found"}, status=404)
-
-# ------------------------------
-# ✅ CONFIRM PAYMENT
-# ------------------------------
+from menu.models import MenuItem  # make sure this is your menu_item model
+from api.models import Offer, AppUser
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def confirm_payment(request, order_number):
+def redeem_offer(request):
+    user = request.user
+    data = request.data
+    items = data.get('items', [])
+    credit_points_used = data.get('credit_points_used', 0)
+
+    # Check user has enough points
+    if user.credit_points < credit_points_used:
+        return Response({"message": "Not enough credit points."}, status=400)
+
+    # Deduct points
+    user.credit_points -= credit_points_used
+    user.save()
+
+    # Create Order
+    order = Order.objects.create(user=user, total_price=0, status="redeemed")
+
+    for item in items:
+        menu_item_id = item.get('menu_item_id')
+        quantity = item.get('quantity', 1)
+        name = item.get('name')
+        price = item.get('price', 0)
+        OrderItem.objects.create(
+            order=order,
+            menu_item_id=menu_item_id,
+            quantity=quantity,
+            price=price,
+            name=name
+        )
+
+    serializer = OrderSerializer(order)
+    return Response({
+        "remaining_points": user.credit_points,
+        "order": serializer.data
+    })
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_voucher(request):
     try:
-        data = request.data
-        method = data.get('method', None)
-        order = Order.objects.get(order_number=order_number)
+        user = request.user
+        voucher_points = int(request.data.get('points', 0))
 
-        order.payment_method = method
-        order.status = "Paid"
-        order.save()
+        if voucher_points > user.credit_points:
+            return Response({"success": False, "message": "Not enough points"}, status=400)
 
-        # Add 1% of total_amount to user's credit points
-        user = order.placed_by
-        earned_points = order.total_amount * Decimal('0.01')
-        
-        # Ensure user has credit_points field
-        if not hasattr(user, 'credit_points'):
-            user.credit_points = Decimal('0.0')
-
-        user.credit_points += earned_points
+        # Deduct points
+        user.credit_points -= voucher_points
         user.save()
 
-        return Response({"success": True, "message": "Payment confirmed", "earned_points": float(earned_points)})
+        # Create a “free order” with total_amount = 0
+        order = Order.objects.create(
+            order_number=str(uuid.uuid4())[:12],
+            placed_by=user,
+            total_amount=0,
+            credit_points_used=voucher_points,
+            status='Pending',
+            customer_name=user.get_full_name() or user.username,
+            promised_time=request.data.get('promised_time', None),
+            order_type=request.data.get('order_type', 'pickup')
+        )
 
-    except Order.DoesNotExist:
-        return Response({"success": False, "message": "Order not found"}, status=404)
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def gcash_payment_qr(request, order_number):
-    try:
-        order = Order.objects.get(order_number=order_number)
-        # Replace this with your actual GCash payment URL or QR API
-        gcash_qr_url = f"https://pay.gcash.com/qr?amount={order.total_amount}&note=Order{order.order_number}"
+        # Optionally add order items
+        for item in request.data.get('items', []):
+            OrderItem.objects.create(
+                order=order,
+                item_name=item['name'],
+                price=0,
+                quantity=int(item.get('quantity', 1)),
+                menu_item_id=item.get('menu_item_id'),
+                size=item.get('size'),
+                customize=item.get('customize')
+            )
+
         return Response({
             "success": True,
-            "qr_url": gcash_qr_url,
-            "total_amount": float(order.total_amount)
+            "message": "Voucher applied and order created",
+            "order_number": order.order_number,
+            "points_deducted": voucher_points
         })
-    except Order.DoesNotExist:
-        return Response({"success": False, "message": "Order not found"}, status=404)
+
+    except Exception as e:
+        return Response({"success": False, "message": str(e)}, status=500)
+from django.shortcuts import get_object_or_404
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redeem_offer(request):
+    user = request.user
+    data = request.data
+    items = data.get('items', [])
+    credit_points_used = Decimal(data.get('credit_points_used', 0)).quantize(Decimal('0.01'))
+
+    # 1️⃣ Check if user has enough points
+    all_orders = Order.objects.filter(placed_by=user)
+    total_earned_points = sum(order.total_amount * Decimal('0.01') for order in all_orders)
+    total_used_points = sum(order.credit_points_used or Decimal('0.0') for order in all_orders)
+    available_points = max(total_earned_points - total_used_points, Decimal('0.0'))
+
+    if credit_points_used > available_points:
+        return Response({"success": False, "message": "Not enough points"}, status=400)
+
+    # 2️⃣ Create the order
+    order = Order.objects.create(
+        order_number=str(uuid.uuid4())[:12],
+        placed_by=user,
+        total_amount=0,
+        credit_points_used=credit_points_used,
+        status='Pending',
+        customer_name = user.name or user.email,
+        promised_time=data.get('promised_time'),
+        order_type=data.get('order_type', 'pickup')
+    )
+
+    # 3️⃣ Create order items with valid MenuItem instances
+    for item in items:
+        menu_item = get_object_or_404(MenuItem, id=item.get('menu_item_id'))
+        OrderItem.objects.create(
+            order=order,
+            item_name=menu_item.name,
+            price=0,
+            quantity=int(item.get('quantity', 1)),
+            menu_item=menu_item,
+            size=item.get('size'),
+            customize=item.get('customize')
+        )
+
+    return Response({
+        "success": True,
+        "message": "Offer redeemed and order created",
+        "order_number": order.order_number
+    })
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_special_offers(request):
+    # Example: pick items that are marked as special or just top 5 items
+    offers = MenuItem.objects.filter(is_special=True)[:10]  # adjust your filter
+    
+    data = [{
+        "id": item.id,
+        "name": item.name,
+        "required_points": item.points or 0,  # you can calculate points per item
+        "image": item.image.url if item.image else None
+    } for item in offers]
+    
+    return Response({"success": True, "offers": data})
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def fetch_gcash_qr(request, order_id):
-    try:
-        order = Order.objects.get(id=order_id)
-        qr_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
-        return Response({"success": True, "qr_url": qr_url})
-    except Order.DoesNotExist:
-        return Response({"success": False, "message": "Order not found"})
+def list_special_offers(request):
+    offers = Offer.objects.all()  # fetch all offers
+
+    data = [{
+        "id": offer.id,
+        "name": offer.name,
+        "required_points": offer.required_points
+    } for offer in offers]
+
+    return Response({"success": True, "offers": data})

@@ -45,11 +45,11 @@ export default function AccountRegistrationScreen() {
 
   // Google Auth setup
   const [request, response, promptAsync] = Google.useAuthRequest({
-  expoClientId: '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
-  androidClientId: '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
-  webClientId: '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
-  scopes: ['profile', 'email'],
-});
+    expoClientId: '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
+    androidClientId: '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
+    webClientId: '286008841345-05ir6hhh63hhktol4qpo9hqnvlqpl4v7.apps.googleusercontent.com',
+    scopes: ['profile', 'email'],
+  });
 
   useEffect(() => {
     if (response?.type === 'success') {
@@ -186,8 +186,7 @@ export default function AccountRegistrationScreen() {
               >
                 <Picker.Item label="Select Role" value="" />
                 <Picker.Item label="Student" value="student" />
-                <Picker.Item label="Staff" value="staff" />
-                <Picker.Item label="Admin" value="admin" />
+                <Picker.Item label="Faculty" value="faculty" />
               </Picker>
             </View>
             {errors.role && <Text style={styles.errorText}>{errors.role}</Text>}

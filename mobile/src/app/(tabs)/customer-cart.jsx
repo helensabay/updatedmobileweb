@@ -10,8 +10,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Switch,
-  Animated,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../../context/CartContext';
@@ -21,7 +20,6 @@ import {
   Roboto_400Regular,
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { getValidToken, createOrder } from '../../api/api';
 
 export default function CustomerCartScreen() {
@@ -31,12 +29,12 @@ export default function CustomerCartScreen() {
   const [selectedTime, setSelectedTime] = useState(null);
   const [loading, setLoading] = useState(false);
   const [customerName, setCustomerName] = useState('');
-  const [creditPoints, setCreditPoints] = useState(0);
-  const [useCredit, setUseCredit] = useState(false);
-  const [savedAmount, setSavedAmount] = useState(0);
-  const [showSavedAnim] = useState(new Animated.Value(0));
+  const [voucherCode, setVoucherCode] = useState('');
+  const [discountAmount, setDiscountAmount] = useState(0);
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
+
+  const [orderStatus, setOrderStatus] = useState(null); // live status
 
   const total = cart.reduce((sum, item) => {
     const price = Number(item.price) || 0;
@@ -44,71 +42,61 @@ export default function CustomerCartScreen() {
     return sum + price * qty;
   }, 0);
 
-  const discount = useCredit && total >= 100 ? Math.min(creditPoints, total) : 0;
-  const finalTotal = Math.max(total - discount, 0);
+  const finalTotal = Math.max(total - discountAmount, 0);
 
   const pickupTimes = ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM'];
 
   // ------------------------------
-  // FETCH USER & CREDIT POINTS
+  // FETCH USER
   // ------------------------------
   useEffect(() => {
     const fetchUserData = async () => {
       try {
         const token = await getValidToken();
-        if (!token) throw new Error('No valid token found. Please log in again.');
+        if (!token) throw new Error('No valid token found.');
 
-        // Fetch user profile
         const userRes = await api.get('/accounts/profile/', {
           headers: { Authorization: `Bearer ${token}` },
         });
         const user = userRes.data;
         if (user) setCustomerName(user.name || '');
-
-        // Fetch credit points
-        const pointsRes = await api.get('/orders/user-credit-points/', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const points = pointsRes.data?.credit_points ?? 0;
-        setCreditPoints(points);
-
-        await AsyncStorage.setItem('@sanaol/auth/points', String(points));
       } catch (err) {
-        console.error('Failed to fetch user data or credit points:', err.response?.data || err.message);
+        console.error('Failed to fetch user data:', err.response?.data || err.message);
         Alert.alert('Error', 'Failed to fetch user info. Please log in again.');
       }
     };
-
     fetchUserData();
   }, []);
 
-  const toggleUseCredit = () => {
-    if (useCredit) {
-      setUseCredit(false);
-      return;
-    }
-    if (total < 100) {
-      Alert.alert('Not eligible', 'Orders must be ₱100 or more to use credit points.');
-      return;
-    }
-    if (!creditPoints || creditPoints <= 0) {
-      Alert.alert('No credit points', 'You have no credit points to use.');
-      return;
-    }
-    setUseCredit(true);
-  };
+  // ------------------------------
+  // HANDLE VOUCHER CODE
+  // ------------------------------
+  const applyVoucher = async () => {
+    if (!voucherCode) return Alert.alert('Error', 'Please enter a voucher code.');
 
-  const startSavedAnimation = () => {
-    setSavedAmount(discount);
-    Animated.sequence([
-      Animated.timing(showSavedAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.delay(1400),
-      Animated.timing(showSavedAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start(() => setSavedAmount(0));
+    try {
+      const token = await getValidToken();
+      const res = await api.post(
+        '/orders/apply-voucher/',
+        { code: voucherCode },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.data.success) {
+        setDiscountAmount(res.data.discount_amount ?? 0);
+        Alert.alert('Success', `Voucher applied! You saved ₱${res.data.discount_amount}`);
+      } else {
+        setDiscountAmount(0);
+        Alert.alert('Invalid Voucher', res.data.message || 'Voucher code is not valid.');
+      }
+    } catch (err) {
+      console.error('Voucher Error:', err);
+      Alert.alert('Error', 'Failed to apply voucher. Please try again.');
+    }
   };
 
   // ------------------------------
-  // HANDLE ORDER & PAYMENT
+  // HANDLE ORDER
   // ------------------------------
   const handleProceed = () => {
     if (!customerName) {
@@ -125,32 +113,14 @@ export default function CustomerCartScreen() {
     }
     goToPayment();
   };
-const goToPayment = async () => {
+
+  const goToPayment = async () => {
   setLoading(true);
-
   try {
-    // 1️⃣ Get latest token
     const token = await getValidToken();
-    if (!token) throw new Error('No valid token found. Please log in again.');
+    if (!token) throw new Error('No valid token found.');
 
-    // 2️⃣ Fetch latest credit points from backend
-    const pointsRes = await api.get('/orders/user-credit-points/', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const availablePoints = parseFloat(pointsRes.data?.credit_points ?? 0);
-
-    // 3️⃣ Determine discount to apply
-    let discountUsed = 0;
-    if (useCredit && total >= 100) {
-      discountUsed = Math.min(availablePoints, total); // clamp to available points
-      if (discountUsed <= 0) {
-        Alert.alert('Insufficient credit points', 'You do not have enough points to use.');
-        setLoading(false);
-        return;
-      }
-    }
-
-    // 4️⃣ Convert selectedTime to ISO format
+    // Convert selectedTime to ISO
     const [hour, minutePart] = selectedTime.split(':');
     let [minute, ampm] = minutePart.split(' ');
     let hour24 = parseInt(hour, 10);
@@ -166,13 +136,21 @@ const goToPayment = async () => {
       0
     );
 
-    // 5️⃣ Build payload for backend
+    // Calculate subtotal (before discount)
+    const subtotal = cart.reduce(
+      (sum, item) => sum + parseFloat(item.price) * Number(item.quantity),
+      0
+    );
+
     const payload = {
       customer_name: customerName,
       order_type: 'pickup',
-      total_amount: total, // send full total to backend
+      subtotal: subtotal,                // add subtotal
+      total_amount: finalTotal,          // after discount
+      discount_applied: discountAmount,
+      payment_method: 'pending',         // default, updated later
+      voucher_code: voucherCode || null,
       promised_time: pickupDate.toISOString(),
-      credit_points_used: parseFloat(discountUsed.toFixed(2)),
       items: cart.map((item) => ({
         menu_item_id: item.id,
         name: item.name,
@@ -183,9 +161,6 @@ const goToPayment = async () => {
       })),
     };
 
-    console.log('Order payload:', payload);
-
-    // 6️⃣ Create order in backend
     const res = await createOrder(payload);
     if (!res.success) {
       Alert.alert('Order Error', res.message || 'Failed to create order');
@@ -193,26 +168,20 @@ const goToPayment = async () => {
       return;
     }
 
-    // 7️⃣ Update local credit points
-    if (discountUsed > 0) {
-      const remainingPoints = Math.max(availablePoints - discountUsed, 0);
-      setCreditPoints(remainingPoints);
-      await AsyncStorage.setItem('@sanaol/auth/points', String(remainingPoints));
-      startSavedAnimation();
-    }
+    // Set live status to pending initially
+    setOrderStatus('pending');
 
-    // 8️⃣ Navigate to Payment page with discount
+    // Navigate to Payment screen
     router.push({
       pathname: '/cart/payment',
       params: {
         orderType: 'pickup',
-        total: total.toFixed(2),
+        total: finalTotal.toFixed(2),
         selectedTime,
         orderId: res.order_number,
-        discountUsed: discountUsed.toFixed(2), // pass discount here
+        discountApplied: discountAmount.toFixed(2),
       },
     });
-
   } catch (err) {
     console.error('Create Order Error:', err);
     Alert.alert('Order Error', err.message || 'Unable to create order. Please try again.');
@@ -222,7 +191,40 @@ const goToPayment = async () => {
 };
 
   // ------------------------------
-  // RENDER FUNCTIONS
+  // RENDER FOODPANDA-STYLE STATUS
+  // ------------------------------
+  const statusSteps = ['pending', 'in_prep', 'in_progress', 'ready', 'completed'];
+
+  const renderStatusTracker = () => {
+    if (!orderStatus) return null;
+
+    return (
+      <View style={styles.statusContainer}>
+        {statusSteps.map((step, index) => {
+          const active = statusSteps.indexOf(orderStatus) >= index;
+          return (
+            <View key={step} style={styles.statusStep}>
+              <View
+                style={[
+                  styles.statusCircle,
+                  { backgroundColor: active ? '#27ae60' : '#ccc' },
+                ]}
+              />
+              <Text style={[styles.statusText, { color: active ? '#27ae60' : '#999' }]}>
+                {step.replace('_', ' ').toUpperCase()}
+              </Text>
+              {index < statusSteps.length - 1 && (
+                <View style={[styles.statusLine, { backgroundColor: active ? '#27ae60' : '#ccc' }]} />
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  // ------------------------------
+  // RENDER CART ITEMS
   // ------------------------------
   const renderItem = ({ item }) => (
     <View style={styles.card}>
@@ -248,9 +250,24 @@ const goToPayment = async () => {
 
   const renderFooter = () => (
     <View>
-      <TouchableOpacity style={styles.addMoreBtn} onPress={() => router.back()}>
-        <Text style={styles.addMoreText}>+ Add more items</Text>
-      </TouchableOpacity>
+      <View style={styles.voucherContainer}>
+        <TextInput
+          style={styles.voucherInput}
+          placeholder="Enter voucher code"
+          value={voucherCode}
+          onChangeText={setVoucherCode}
+        />
+        <TouchableOpacity style={styles.applyBtn} onPress={applyVoucher}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Apply</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ paddingHorizontal: 12, marginTop: 14 }}>
+        {discountAmount > 0 && (
+          <Text style={styles.discountApplied}>Discount Applied: -₱{discountAmount}</Text>
+        )}
+        <Text style={styles.finalTotal}>Final Total: ₱{finalTotal}</Text>
+      </View>
 
       <View style={styles.pickupContainer}>
         <Text style={styles.pickupLabel}>Select Pickup Time:</Text>
@@ -258,7 +275,10 @@ const goToPayment = async () => {
           {pickupTimes.map((time) => (
             <TouchableOpacity
               key={time}
-              style={[styles.pickupTimeBtn, selectedTime === time && styles.pickupTimeSelected]}
+              style={[
+                styles.pickupTimeBtn,
+                selectedTime === time && styles.pickupTimeSelected,
+              ]}
               onPress={() => setSelectedTime(time)}
             >
               <Text
@@ -274,29 +294,8 @@ const goToPayment = async () => {
         </ScrollView>
       </View>
 
-      <View style={{ paddingHorizontal: 12, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View>
-          <Text style={styles.discountText}>Credit Points: {creditPoints}</Text>
-          <Text style={{ fontFamily: 'Roboto_400Regular', color: '#666', fontSize: 13 }}>
-            {total >= 100 ? 'You may use your points for discount' : 'Orders must be ₱100+ to use points'}
-          </Text>
-        </View>
-
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontFamily: 'Roboto_700Bold', marginBottom: 6 }}>{useCredit ? 'Using' : 'Use'}</Text>
-          <Switch
-            value={useCredit}
-            onValueChange={toggleUseCredit}
-            trackColor={{ false: '#ccc', true: '#f1c40f' }}
-            thumbColor={useCredit ? '#f39c12' : '#fff'}
-          />
-        </View>
-      </View>
-
-      <View style={{ paddingHorizontal: 12, marginTop: 14 }}>
-        {discount > 0 && <Text style={styles.discountApplied}>Discount Applied: -₱{discount}</Text>}
-        <Text style={styles.finalTotal}>Final Total: ₱{finalTotal}</Text>
-      </View>
+      {/* Status Tracker */}
+      {renderStatusTracker()}
     </View>
   );
 
@@ -348,12 +347,6 @@ const goToPayment = async () => {
           <Text style={styles.proceedText}>Proceed to Payment</Text>
         </TouchableOpacity>
       )}
-
-      {savedAmount > 0 && (
-        <Animated.View style={[styles.savedToast, { opacity: showSavedAnim }]}>
-          <Text style={styles.savedText}>You saved ₱{savedAmount} 🎉</Text>
-        </Animated.View>
-      )}
     </View>
   );
 }
@@ -376,18 +369,21 @@ const styles = StyleSheet.create({
   trashBtn: { padding: 8, borderRadius: 10, backgroundColor: '#fff5eb' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyText: { marginTop: 5, fontSize: 18, fontFamily: 'Roboto_400Regular', color: '#999' },
-  addMoreBtn: { backgroundColor: '#f97316', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, alignSelf: 'stretch', marginVertical: 12, justifyContent: 'center', alignItems: 'center' },
-  addMoreText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#fff' },
   pickupContainer: { paddingHorizontal: 12, marginVertical: 10 },
   pickupLabel: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333', marginBottom: 6 },
   pickupTimeBtn: { borderWidth: 1, borderColor: '#f97316', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 12, marginRight: 10, marginBottom: 10 },
   pickupTimeSelected: { backgroundColor: '#f97316' },
   pickupTimeText: { fontSize: 14, fontFamily: 'Roboto_400Regular', color: '#333' },
-  discountText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#444' },
+  voucherContainer: { flexDirection: 'row', marginVertical: 14, paddingHorizontal: 12 },
+  voucherInput: { flex: 1, borderWidth: 1, borderColor: '#f97316', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
+  applyBtn: { backgroundColor: '#f97316', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' },
   discountApplied: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#c0392b' },
-  finalTotal: { fontSize: 20, fontFamily: 'Roboto_700Bold', color: '#27ae60', marginTop: 8 },
+  finalTotal: { fontSize: 20, fontFamily: 'Roboto_700Bold', color: '#27ae60', marginTop: 8, paddingHorizontal: 12 },
   proceedBtn: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#27ae60', paddingVertical: 14, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4 },
   proceedText: { color: '#fff', fontFamily: 'Roboto_700Bold', fontSize: 16 },
-  savedToast: { position: 'absolute', bottom: 110, left: 40, right: 40, paddingVertical: 10, backgroundColor: '#fff7ed', borderRadius: 12, borderWidth: 1, borderColor: '#f5b041', alignItems: 'center', justifyContent: 'center', elevation: 6 },
-  savedText: { fontFamily: 'Roboto_700Bold', color: '#d35400', fontSize: 16 },
+  statusContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, paddingHorizontal: 12 },
+  statusStep: { flexDirection: 'row', alignItems: 'center' },
+  statusCircle: { width: 16, height: 16, borderRadius: 8 },
+  statusText: { fontSize: 12, marginHorizontal: 4 },
+  statusLine: { width: 24, height: 2, marginHorizontal: 2 },
 });

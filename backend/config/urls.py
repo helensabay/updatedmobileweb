@@ -13,12 +13,15 @@ urlpatterns = [
 
     path('api/', include('notifications.urls')),  # ✅ only this one for notifications
     path('api/', include('orders.urls')),
+    path('api/', include('api.urls')),  # ✅ must include this
+    path('api/', include('catering.urls')),  # now /api/catering-events/ works
 
     # Redirect the root path to a simple health endpoint to avoid 404s
     path("", RedirectView.as_view(url="/api/health/", permanent=False), name="root"),
     path("admin/", admin.site.urls),
     path("api/", include("api.urls")),
         path('api/accounts/', include('accounts.urls')),
+    path('api/', include('menu.urls')),
 
     path("accounts/", include("allauth.urls")),
 ]
