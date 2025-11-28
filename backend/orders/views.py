@@ -127,7 +127,8 @@ def create_order(request):
             )
 
         # 6️⃣ Generate unique order number
-        order_number = str(uuid.uuid4())[:12]
+
+        order_number = str(uuid.uuid4())[:32]  # unique, max 32 chars
 
         # 7️⃣ Create the order
         order = Order.objects.create(
@@ -171,32 +172,16 @@ def get_user_orders(request):
     serializer = OrderSerializer(orders, many=True)
     return Response({"orders": serializer.data}, status=200)
 
+# ------------------------------
+# ✅ USER CREDIT POINTS
+# ------------------------------
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def user_credit_points(request):
     user = request.user
-
-    # Get all orders for this user
-    all_orders = Order.objects.filter(placed_by=user)
-    
-    # Calculate earned points
-    total_earned_points = sum(
-        Decimal(order.total_amount) * Decimal('0.01')
-        for order in all_orders
-    )
-
-    # Calculate used points
-    total_used_points = sum(
-        Decimal(order.credit_points_used or 0)
-        for order in all_orders
-    )
-
-    # Ensure Decimal and quantize
-    credit_points = Decimal(max(total_earned_points - total_used_points, Decimal('0.0'))).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-
-    serializer = CreditPointsSerializer({'credit_points': credit_points})
+    available_points = get_available_points(user)
+    serializer = CreditPointsSerializer({'credit_points': available_points})
     return Response(serializer.data)
-
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def gcash_link(request, order_number):
@@ -291,39 +276,73 @@ from api.models import Offer, AppUser
 @permission_classes([IsAuthenticated])
 def redeem_offer(request):
     user = request.user
-    data = request.data
-    items = data.get('items', [])
-    credit_points_used = data.get('credit_points_used', 0)
+    offer_id = request.data.get('offer_id')
+    points_to_use = Decimal(request.data.get('points_used', 0)).quantize(Decimal('0.01'), ROUND_DOWN)
 
-    # Check user has enough points
-    if user.credit_points < credit_points_used:
-        return Response({"message": "Not enough credit points."}, status=400)
+    offer = get_object_or_404(Offer, id=offer_id)
 
-    # Deduct points
-    user.credit_points -= credit_points_used
-    user.save()
+    # ✅ Calculate available points dynamically
+    available_points = get_available_points(user)
+    if points_to_use > available_points:
+        return Response({"success": False, "message": "Not enough credit points"}, status=400)
 
-    # Create Order
-    order = Order.objects.create(user=user, total_price=0, status="redeemed")
+    # Generate order
+    order_number = str(uuid.uuid4())[:32]
+    order = Order.objects.create(
+        order_number=order_number,
+        placed_by=user,
+        customer_name=user.get_full_name() or user.username,
+        order_type=request.data.get('order_type', 'pickup'),
+        promised_time=request.data.get('promised_time'),
+        subtotal=Decimal('0.00'),
+        discount=Decimal('0.00'),
+        total_amount=Decimal('0.00'),
+        credit_points_used=points_to_use,
+        use_credit_points=True,
+        credit_points_before=available_points,
+        status='Pending',
+    )
 
-    for item in items:
-        menu_item_id = item.get('menu_item_id')
-        quantity = item.get('quantity', 1)
-        name = item.get('name')
-        price = item.get('price', 0)
+    subtotal = Decimal('0.00')
+    item_names = []
+    for menu_item in offer.menu_items.all():
         OrderItem.objects.create(
             order=order,
-            menu_item_id=menu_item_id,
-            quantity=quantity,
-            price=price,
-            name=name
+            item_name=menu_item.name,
+            price=menu_item.price,
+            quantity=1,
+            menu_item=menu_item
         )
+        subtotal += menu_item.price
+        item_names.append(menu_item.name)
 
-    serializer = OrderSerializer(order)
+    # Update totals after deduction
+    order.subtotal = subtotal
+    order.total_amount = subtotal - points_to_use
+    order.save(update_fields=['subtotal', 'total_amount'])
+
     return Response({
-        "remaining_points": user.credit_points,
-        "order": serializer.data
-    })
+        "success": True,
+        "message": f"Offer '{offer.name}' redeemed successfully!",
+        "order_number": order.order_number,
+        "items": item_names,
+        "points_used": points_to_use,
+        "points_before": available_points,
+        "remaining_points": available_points - points_to_use
+    }, status=201)
+def get_available_points(user):
+    all_orders = Order.objects.filter(placed_by=user)
+    earned_points = sum(
+        Decimal(order.total_amount) * Decimal('0.01')
+        for order in all_orders
+    )
+    used_points = sum(
+        Decimal(order.credit_points_used or 0)
+        for order in all_orders
+    )
+    return max(earned_points - used_points, Decimal('0.00')).quantize(Decimal('0.01'), ROUND_DOWN)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def apply_voucher(request):
@@ -372,54 +391,73 @@ def apply_voucher(request):
     except Exception as e:
         return Response({"success": False, "message": str(e)}, status=500)
 from django.shortcuts import get_object_or_404
-
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def redeem_offer(request):
     user = request.user
-    data = request.data
-    items = data.get('items', [])
-    credit_points_used = Decimal(data.get('credit_points_used', 0)).quantize(Decimal('0.01'))
+    offer_id = request.data.get('offer_id')
+    points_to_use = Decimal(request.data.get('points_used', 0)).quantize(Decimal('0.01'), ROUND_DOWN)
 
-    # 1️⃣ Check if user has enough points
-    all_orders = Order.objects.filter(placed_by=user)
-    total_earned_points = sum(order.total_amount * Decimal('0.01') for order in all_orders)
-    total_used_points = sum(order.credit_points_used or Decimal('0.0') for order in all_orders)
-    available_points = max(total_earned_points - total_used_points, Decimal('0.0'))
+    # Get the offer
+    offer = get_object_or_404(Offer, id=offer_id)
 
-    if credit_points_used > available_points:
-        return Response({"success": False, "message": "Not enough points"}, status=400)
+    # Calculate available points dynamically
+    available_points = get_available_points(user)
+    if points_to_use > available_points:
+        return Response({"success": False, "message": "Not enough credit points"}, status=400)
 
-    # 2️⃣ Create the order
+    # Create unique order number
+    order_number = str(uuid.uuid4())[:32]
+
+    # Create the order
     order = Order.objects.create(
-        order_number=str(uuid.uuid4())[:12],
+        order_number=order_number,
         placed_by=user,
-        total_amount=0,
-        credit_points_used=credit_points_used,
+        customer_name=getattr(user, "full_name", str(user)),   
+        promised_time=request.data.get('promised_time'),
+        subtotal=Decimal('0.00'),
+        discount=Decimal('0.00'),
+        total_amount=Decimal('0.00'),
+        credit_points_used=points_to_use,
+        use_credit_points=True,
+        credit_points_before=available_points,
         status='Pending',
-        customer_name = user.name or user.email,
-        promised_time=data.get('promised_time'),
-        order_type=data.get('order_type', 'pickup')
     )
 
-    # 3️⃣ Create order items with valid MenuItem instances
-    for item in items:
-        menu_item = get_object_or_404(MenuItem, id=item.get('menu_item_id'))
+    # Add menu items from the offer
+    subtotal = Decimal('0.00')
+    item_names = []
+    for menu_item in offer.menu_items.all():
         OrderItem.objects.create(
             order=order,
             item_name=menu_item.name,
-            price=0,
-            quantity=int(item.get('quantity', 1)),
-            menu_item=menu_item,
-            size=item.get('size'),
-            customize=item.get('customize')
+            price=menu_item.price,
+            quantity=1,
+            menu_item=menu_item
         )
+        subtotal += menu_item.price
+        item_names.append(menu_item.name)
+
+    # Update totals after deduction
+    order.subtotal = subtotal
+    order.total_amount = max(subtotal - points_to_use, Decimal('0.00'))
+    order.save(update_fields=['subtotal', 'total_amount'])
+
+    remaining_points = available_points - points_to_use
 
     return Response({
         "success": True,
-        "message": "Offer redeemed and order created",
-        "order_number": order.order_number
-    })
+        "message": f"Offer '{offer.name}' redeemed successfully!",
+        "order_number": order.order_number,
+        "items": item_names,
+        "points_before": available_points,
+        "points_used": points_to_use,
+        "remaining_points": remaining_points
+    }, status=201)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_special_offers(request):

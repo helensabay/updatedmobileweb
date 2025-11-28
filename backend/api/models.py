@@ -4,6 +4,8 @@ from uuid import uuid4
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from menu.models import MenuItem  # if MenuItem is in the same app
+
 from django.contrib.auth.hashers import make_password, check_password
 from accounts.models import AppUserManager  # <-- import the manager
 
@@ -15,10 +17,11 @@ except Exception:  # fallback if storage cannot be imported during migrations
 class Offer(models.Model):
     name = models.CharField(max_length=255)
     required_points = models.PositiveIntegerField()
-    # add other fields as needed
+    menu_items = models.ManyToManyField('MenuItem', blank=True)
 
     def __str__(self):
         return self.name
+
 
 class AppUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
@@ -1075,9 +1078,11 @@ class Order(models.Model):
             models.Index(fields=["auto_advance_at"], name="order_auto_advance_at_idx"),
         ]
 
-    def __str__(self) -> str:
-        return f"{self.order_number} ({self.status})"
-
+    
+    def save(self, *args, **kwargs):
+        if not self.order_number:  # None or ''
+            self.order_number = uuid4().hex[:12].upper()
+        super().save(*args, **kwargs)
 
 class OrderItem(models.Model):
     STATE_QUEUED = "queued"

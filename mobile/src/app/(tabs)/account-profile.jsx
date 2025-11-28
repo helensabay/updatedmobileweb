@@ -121,33 +121,36 @@ export default function AccountProfile() {
 
   // --- Redeem offer ---
   const redeemOffer = async (offer) => {
-    try {
-      const token = await getValidToken();
-      if (!token) throw new Error('No access token');
+  try {
+    const token = await getValidToken();
+    if (!token) throw new Error('No access token');
 
-      const res = await api.post(
-        '/orders/redeem-offer/',
-        {
-          items: [
-            { menu_item_id: offer.id, name: offer.name, price: 0, quantity: 1 }
-          ],
-          credit_points_used: offer.points
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+    const res = await api.post(
+  '/orders/redeem-offer/',
+  {
+    offer_id: offer.id,
+    points_used: offer.points // <-- must match backend
+  },
+  { headers: { Authorization: `Bearer ${token}` } }
+);
 
-      setCreditPoints(res.data.remaining_points ?? creditPoints); // fallback
-      clearCart();
 
-      Alert.alert('Success', `You redeemed ${offer.name} for ${offer.points} points!`);
-      setCreditModal(false);
+    setCreditPoints(res.data.remaining_points ?? creditPoints);
+    clearCart();
+    Alert.alert('Success', `You redeemed ${offer.name} for ${offer.points} points!`);
+    setCreditModal(false);
 
-    } catch (err) {
-      console.error('redeemOffer error:', err.response?.data || err.message);
-      const message = err.response?.data?.message || err.message || 'Failed to redeem the offer.';
-      Alert.alert('Error', message);
-    }
-  };
+  } catch (err) {
+    console.error('redeemOffer error:', err.response?.data || err.message);
+    const message =
+      err.response?.data?.detail || // Django DRF usually returns 'detail'
+      err.response?.data?.message ||
+      err.message ||
+      'Failed to redeem the offer.';
+    Alert.alert('Error', message);
+  }
+};
+
 
   // --- Pick avatar ---
   const pickAvatar = async () => {

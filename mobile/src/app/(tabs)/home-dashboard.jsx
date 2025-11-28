@@ -60,7 +60,7 @@ export default function HomeDashboardScreen() {
     getUserRole();
   }, []);
 
-  // Load menu items & notifications
+  // Load menu items
   const loadMenuItems = async () => {
     try {
       setLoading(true);
@@ -73,17 +73,24 @@ export default function HomeDashboardScreen() {
     }
   };
 
+  // Load notifications
   const loadBackendNotifications = async () => {
     try {
       const backend = await fetchNotifications();
       setMenuNotifications(prev => {
         const merged = [...prev];
         backend.forEach(n => {
-          if (!prev.find(p => p.item.id === n.id && p.type === 'backend')) {
-            merged.push({ type: 'backend', item: n });
+          if (!prev.find(p => p.id === n.id)) {
+            merged.push({
+              id: n.id,
+              type: n.type, // "new", "soldout", "deleted"
+              item: { name: n.title },
+              created_at: n.created_at,
+            });
           }
         });
-        return merged;
+        // Sort by newest first
+        return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       });
     } catch (err) {
       console.error('Failed to fetch backend notifications:', err);
@@ -97,7 +104,7 @@ export default function HomeDashboardScreen() {
 
   useEffect(() => {
     loadAllData();
-    const interval = setInterval(loadAllData, 30000);
+    const interval = setInterval(loadAllData, 30000); // refresh every 30s
     return () => clearInterval(interval);
   }, []);
 
@@ -117,28 +124,13 @@ export default function HomeDashboardScreen() {
     return Object.values(categoryMap);
   }, [menuItems]);
 
-  // Separate Catering if it exists
-  const mainCategories = useMemo(() => {
-    return categoriesData.filter(cat => cat.title.toLowerCase() !== 'catering');
-  }, [categoriesData]);
+  const mainCategories = useMemo(() => categoriesData.filter(cat => cat.title.toLowerCase() !== 'catering'), [categoriesData]);
+  const cateringCategory = useMemo(() => categoriesData.find(cat => cat.title.toLowerCase() === 'catering') || null, [categoriesData]);
 
-  const cateringCategory = useMemo(() => {
-    return categoriesData.find(cat => cat.title.toLowerCase() === 'catering') || null;
-  }, [categoriesData]);
-
-  // Filtered categories for display (search + role)
   const filteredMainCategories = useMemo(() => {
     let cats = mainCategories;
-
-    if (searchQuery) {
-      cats = cats.filter(cat => cat.title.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-
-    // Remove Catering if not faculty
-    if (userRole !== 'faculty') {
-      cats = cats.filter(cat => cat.title.toLowerCase() !== 'catering');
-    }
-
+    if (searchQuery) cats = cats.filter(cat => cat.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (userRole !== 'faculty') cats = cats.filter(cat => cat.title.toLowerCase() !== 'catering');
     return cats;
   }, [mainCategories, searchQuery, userRole]);
 
@@ -150,31 +142,12 @@ export default function HomeDashboardScreen() {
       : null;
   }, [cateringCategory, searchQuery, userRole]);
 
-  // All items filtered (removes catering for students)
   const allItemsFiltered = useMemo(() => {
     let items = menuItems;
-
-    if (userRole !== 'faculty') {
-      items = items.filter(item => (item.category || '').toLowerCase() !== 'catering');
-    }
-
-    if (searchQuery) {
-      items = items.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-
+    if (userRole !== 'faculty') items = items.filter(item => (item.category || '').toLowerCase() !== 'catering');
+    if (searchQuery) items = items.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
     return items;
   }, [menuItems, searchQuery, userRole]);
-
-  // Grouped items map used if needed later (kept for future)
-  const groupedMenuItems = useMemo(() => {
-    const groups = {};
-    menuItems.forEach(item => {
-      const cat = item.category || 'Others';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(item);
-    });
-    return groups;
-  }, [menuItems]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -243,7 +216,6 @@ export default function HomeDashboardScreen() {
     );
   }
 
-  // Helper to create a URL-safe category slug (no spaces)
   const makeCategorySlug = (title) => encodeURIComponent(title.replace(/\s+/g, ''));
 
   return (
@@ -360,6 +332,7 @@ export default function HomeDashboardScreen() {
       {/* Dropdown Overlay */}
       <>
         {openDropdown && <Pressable style={{ position: 'absolute', inset: 0 }} onPress={() => setOpenDropdown(null)} />}
+        {/* Settings Dropdown */}
         {openDropdown === 'settings' && renderDropdownContainer(
           <>
             <DropdownItem icon={<User size={16} color="#374151" />} label="Profile" onPress={() => router.push('/(tabs)/account-profile')} />
@@ -370,23 +343,24 @@ export default function HomeDashboardScreen() {
           </>
         )}
 
+        {/* Notifications Dropdown */}
         {openDropdown === 'notifications' && renderDropdownContainer(
-          <>
-            {menuNotifications.length === 0 ? (
-              <Text style={{ color:'#6B7280', textAlign:'center', padding:8 }}>No updates</Text>
-            ) : (
-              <>
-                {menuNotifications.slice(-5).map((n, idx) => (
-                  <View key={idx} style={{ paddingVertical: 4 }}>
-                    <Text style={{
-                      color: n.type === 'new' ? '#16a34a' : n.type === 'soldout' ? '#ef4444' : n.type === 'deleted' ? '#9ca3af' : '#374151',
-                      fontWeight: '500'
-                    }}>
-                      {n.type === 'new' ? 'New:' : n.type === 'soldout' ? 'Sold Out:' : n.type === 'deleted' ? 'Removed:' : ''} {n.item.name || n.item.title}
-                    </Text>
-                  </View>
-                ))}
-              </>
+  <>
+    {menuNotifications.length === 0 ? (
+      <Text style={{ color:'#6B7280', textAlign:'center', padding:8 }}>No updates</Text>
+    ) : (
+      menuNotifications.slice(0, 5).map((n, idx) => (
+        <View key={idx} style={{ paddingVertical: 4 }}>
+          <Text style={{
+            color: n.type === 'new' ? '#16a34a' : n.type === 'soldout' ? '#ef4444' : n.type === 'deleted' ? '#9ca3af' : '#374151',
+            fontWeight: '500',
+          }}>
+            {n.type === 'new' ? 'New:' : n.type === 'soldout' ? 'Sold Out:' : n.type === 'deleted' ? 'Removed:' : ''} {n.title}
+          </Text>
+          <Text style={{ fontSize: 10, color: '#6b7280' }}>{new Date(n.created_at).toLocaleString()}</Text>
+          <Text style={{ fontSize: 12, color: '#374151' }}>{n.message}</Text>
+        </View>
+              ))
             )}
           </>
         )}
