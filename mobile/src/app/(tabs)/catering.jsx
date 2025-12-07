@@ -16,7 +16,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
-import { fetchMenuItems, createCateringEvent } from "../../api/api";
+import { fetchMenuItems, createCateringEvent, fetchCateringEvents } from "../../api/api";
 
 /* ---------------------------
    Convert "5:32 PM" → "17:32"
@@ -39,6 +39,7 @@ export default function CateringTab({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState({ field: "", visible: false });
+  const [eventTab, setEventTab] = useState("upcoming"); // "upcoming" or "past"
 
   const [scheduleForm, setScheduleForm] = useState({
     eventName: "",
@@ -54,73 +55,85 @@ export default function CateringTab({ navigation }) {
     selectedItems: [],
   });
 
+  /* ------------------ Load Data ------------------ */
   useEffect(() => {
     const loadData = async () => {
       try {
+        setLoading(true);
+
+        // 1️⃣ Get logged-in user
         const userData = await AsyncStorage.getItem("@sanaol/auth/user");
         const parsed = userData ? JSON.parse(userData) : null;
-        if (parsed?.role !== "faculty") {
+
+        if (!parsed || parsed.role !== "faculty") {
           setAllowed(false);
           return;
         }
         setAllowed(true);
 
-        const items = await fetchMenuItems();
-        const itemsWithQty = items.map((i) => ({ ...i, selectedQuantity: 1 }));
-        setMenuItems(itemsWithQty);
+        // 2️⃣ Auto-fill client
+        const clientName = parsed.name?.trim() || "";
+        setScheduleForm(prev => ({ ...prev, client: clientName }));
 
-        // Here you can fetch existing events from API if available
-        setCateringEvents([]);
+        // 3️⃣ Fetch menu items
+        const items = await fetchMenuItems();
+        setMenuItems((items && Array.isArray(items) ? items : []).map(i => ({ ...i, selectedQuantity: 1 })));
+
+        // 4️⃣ Fetch existing events for this client
+        const events = await fetchCateringEvents(clientName);
+        console.log("Fetched events:", events);
+
+        // 5️⃣ Normalize client_name and ensure items array exists
+        const normalizedEvents = (events && Array.isArray(events) ? events : []).map(ev => ({
+          ...ev,
+          client_name: ev.client_name?.trim() || "",
+          items: Array.isArray(ev.items) ? ev.items : [],
+        }));
+
+        setCateringEvents(normalizedEvents);
+
       } catch (err) {
-        console.error(err);
+        console.error("Error loading catering data:", err);
       } finally {
         setLoading(false);
       }
     };
+
     loadData();
   }, []);
 
+  /* ------------------ Handlers ------------------ */
   const handleInputChange = (field, value) => {
-    setScheduleForm((prev) => ({ ...prev, [field]: value }));
+    setScheduleForm(prev => ({ ...prev, [field]: value }));
   };
 
   const toggleMenuItem = (itemId) => {
-    setScheduleForm((prev) => {
+    setScheduleForm(prev => {
       const exists = prev.selectedItems.includes(itemId);
       return {
         ...prev,
         selectedItems: exists
-          ? prev.selectedItems.filter((id) => id !== itemId)
+          ? prev.selectedItems.filter(id => id !== itemId)
           : [...prev.selectedItems, itemId],
       };
     });
   };
 
   const handleQuantityChange = (itemId, qty) => {
-    setMenuItems((prev) =>
-      prev.map((i) => (i.id === itemId ? { ...i, selectedQuantity: qty } : i))
+    setMenuItems(prev =>
+      prev.map(i => i.id === itemId ? { ...i, selectedQuantity: qty } : i)
     );
   };
 
   const handleScheduleSubmit = async () => {
     const required = [
-      "eventName",
-      "client",
-      "date",
-      "startTime",
-      "endTime",
-      "location",
-      "attendees",
-      "contactName",
-      "contactPhone",
+      "eventName", "client", "date", "startTime", "endTime",
+      "location", "attendees", "contactName", "contactPhone"
     ];
 
-    const missing = required.filter(
-      (f) => !scheduleForm[f] || scheduleForm[f].toString().trim() === ""
-    );
-
+    const missing = required.filter(f => !scheduleForm[f] || scheduleForm[f].toString().trim() === "");
     if (missing.length) {
-      Alert.alert("Error", `Please fill all required fields.`);
+      Alert.alert("Error", "Please fill all required fields.");
       return;
     }
 
@@ -129,8 +142,8 @@ export default function CateringTab({ navigation }) {
       return;
     }
 
-    const selectedItemsData = scheduleForm.selectedItems.map((itemId) => {
-      const item = menuItems.find((i) => i.id === itemId);
+    const selectedItemsData = scheduleForm.selectedItems.map(itemId => {
+      const item = menuItems.find(i => i.id === itemId);
       return {
         menu_item: item.id,
         name: item.name,
@@ -159,15 +172,14 @@ export default function CateringTab({ navigation }) {
     try {
       await createCateringEvent(newEvent);
 
-      // Update local state to display reserved event
-      setCateringEvents((prev) => [...prev, newEvent]);
-
+      setCateringEvents(prev => [...prev, newEvent]);
       Alert.alert("Success", "Catering event scheduled!");
       setModalVisible(false);
 
-      setScheduleForm({
+      // Reset form
+      setScheduleForm(prev => ({
+        ...prev,
         eventName: "",
-        client: "",
         date: "",
         startTime: "",
         endTime: "",
@@ -177,13 +189,14 @@ export default function CateringTab({ navigation }) {
         contactPhone: "",
         notes: "",
         selectedItems: [],
-      });
+      }));
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Failed to schedule event.");
     }
   };
 
+  /* ------------------ Loading / Access ------------------ */
   if (loading || allowed === null) {
     return (
       <View style={styles.loaderContainer}>
@@ -195,13 +208,22 @@ export default function CateringTab({ navigation }) {
   if (!allowed) {
     return (
       <View style={styles.loaderContainer}>
-        <Text style={{ color: "red", fontSize: 16 }}>
-          You are not allowed to access Catering.
-        </Text>
+        <Text style={{ color: "red", fontSize: 16 }}>You are not allowed to access Catering.</Text>
       </View>
     );
   }
 
+  /* ------------------ Filter events ------------------ */
+  const today = new Date();
+  const userEvents = cateringEvents.filter(
+    event => event.client_name.toLowerCase() === scheduleForm.client.trim().toLowerCase()
+  );
+
+  const upcomingEvents = userEvents.filter(event => new Date(event.event_date) >= today);
+  const pastEvents = userEvents.filter(event => new Date(event.event_date) < today);
+  const displayedEvents = eventTab === "upcoming" ? upcomingEvents : pastEvents;
+
+  /* ------------------ Render ------------------ */
   return (
     <View style={{ flex: 1, backgroundColor: "#fdfdfd" }}>
       <ImageBackground
@@ -222,79 +244,67 @@ export default function CateringTab({ navigation }) {
       </ImageBackground>
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <TouchableOpacity
-          style={styles.scheduleBtn}
-          onPress={() => setModalVisible(true)}
-        >
+        <TouchableOpacity style={styles.scheduleBtn} onPress={() => setModalVisible(true)}>
           <Text style={styles.scheduleBtnText}>Schedule New Catering Event</Text>
         </TouchableOpacity>
 
-        {cateringEvents.length === 0 && (
+        {/* Tabs */}
+        <View style={{ flexDirection: "row", justifyContent: "space-around", marginBottom: 12 }}>
+          <TouchableOpacity
+            onPress={() => setEventTab("upcoming")}
+            style={[{ padding: 8, borderRadius: 8 }, eventTab === "upcoming" && { backgroundColor: "#f97316" }]}
+          >
+            <Text style={{ color: eventTab === "upcoming" ? "#fff" : "#333", fontWeight: "600" }}>Upcoming</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setEventTab("past")}
+            style={[{ padding: 8, borderRadius: 8 }, eventTab === "past" && { backgroundColor: "#f97316" }]}
+          >
+            <Text style={{ color: eventTab === "past" ? "#fff" : "#333", fontWeight: "600" }}>Past</Text>
+          </TouchableOpacity>
+        </View>
+
+        {displayedEvents.length === 0 && (
           <Text style={{ padding: 16, color: "#555", textAlign: "center" }}>
-            No Catering events available.
+            No {eventTab === "upcoming" ? "upcoming" : "past"} events.
           </Text>
         )}
 
-        {/* DISPLAY RESERVED EVENTS */}
-        {cateringEvents.map((event) => (
+        {displayedEvents.map(event => (
           <View key={event.id} style={styles.eventCard}>
             <Text style={styles.eventTitle}>{event.name}</Text>
-            <Text>Date: {event.event_date}</Text>
-            <Text>
-              Time: {event.start_time} - {event.end_time}
-            </Text>
-            <Text>Location: {event.location}</Text>
-            <Text>Attendees: {event.guest_count}</Text>
-            <Text>Client: {event.client_name}</Text>
-            {event.notes ? <Text>Notes: {event.notes}</Text> : null}
+            <Text style={styles.highlightedText}>📅 Date: {event.event_date}</Text>
+            <Text style={styles.highlightedText}>⏰ Time: {event.start_time} - {event.end_time}</Text>
+            <Text style={styles.highlightedText}>📍 Location: {event.location}</Text>
+            <Text style={styles.highlightedText}>👥 Attendees: {event.guest_count}</Text>
+            <Text style={styles.highlightedText}>👤 Client: {event.client_name}</Text>
+            {event.notes && <Text style={styles.highlightedText}>📝 Notes: {event.notes}</Text>}
 
-            <Text style={{ marginTop: 6, fontWeight: "600" }}>Menu Items:</Text>
+            <Text style={{ marginTop: 6, fontWeight: "700" }}>🍽 Menu Items:</Text>
             <View style={styles.menuGrid}>
-              {event.items.map((item, idx) => (
+              {event.items?.map((item, idx) => (
                 <View key={idx} style={styles.menuCard}>
-                  {item.image ? (
-                    <Image source={item.image} style={styles.menuImage} />
-                  ) : (
-                    <View style={styles.menuImagePlaceholder} />
-                  )}
-                  <Text style={styles.menuCardText}>
-                    {item.name} x {item.quantity}
-                  </Text>
+                  {item.image ? <Image source={item.image} style={styles.menuImage} /> : <View style={styles.menuImagePlaceholder} />}
+                  <Text style={styles.menuCardText}>{item.name} x {item.quantity}</Text>
                 </View>
               ))}
             </View>
           </View>
         ))}
 
-        {/* MODAL */}
-        <Modal
-          visible={modalVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setModalVisible(false)}
-        >
+        {/* MODAL: Schedule Event */}
+        <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
           <View style={styles.modalOverlay}>
             <ScrollView style={styles.modalContent}>
               <Text style={styles.modalTitle}>Schedule Catering Event</Text>
 
-              <Field
-                label="Event Name"
-                value={scheduleForm.eventName}
-                onChange={(v) => handleInputChange("eventName", v)}
-              />
-              <Field
-                label="Client"
-                value={scheduleForm.client}
-                onChange={(v) => handleInputChange("client", v)}
-              />
+              <Field label="Event Name" value={scheduleForm.eventName} onChange={v => handleInputChange("eventName", v)} />
+              <Field label="Client" value={scheduleForm.client} editable={false} />
 
-              {/* DATE */}
+              {/* Date */}
               <View style={{ marginBottom: 14 }}>
                 <Text style={styles.inputLabel}>Event Date</Text>
-                <TouchableOpacity
-                  onPress={() => setShowDatePicker(true)}
-                  style={styles.inputField}
-                >
+                <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.inputField}>
                   <Text>{scheduleForm.date || "Select date"}</Text>
                 </TouchableOpacity>
                 {showDatePicker && (
@@ -304,27 +314,15 @@ export default function CateringTab({ navigation }) {
                     display="default"
                     onChange={(e, selectedDate) => {
                       setShowDatePicker(false);
-                      if (selectedDate)
-                        handleInputChange(
-                          "date",
-                          selectedDate.toISOString().split("T")[0]
-                        );
+                      if (selectedDate) handleInputChange("date", selectedDate.toISOString().split("T")[0]);
                     }}
                   />
                 )}
               </View>
 
-              {/* TIME */}
-              <TimeField
-                label="Start Time"
-                value={scheduleForm.startTime}
-                onPress={() => setShowTimePicker({ field: "startTime", visible: true })}
-              />
-              <TimeField
-                label="End Time"
-                value={scheduleForm.endTime}
-                onPress={() => setShowTimePicker({ field: "endTime", visible: true })}
-              />
+              {/* Time */}
+              <TimeField label="Start Time" value={scheduleForm.startTime} onPress={() => setShowTimePicker({ field: "startTime", visible: true })} />
+              <TimeField label="End Time" value={scheduleForm.endTime} onPress={() => setShowTimePicker({ field: "endTime", visible: true })} />
 
               {showTimePicker.visible && (
                 <DateTimePicker
@@ -334,24 +332,18 @@ export default function CateringTab({ navigation }) {
                   onChange={(e, selected) => {
                     setShowTimePicker({ field: "", visible: false });
                     if (selected) {
-                      const formatted = selected.toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      });
+                      const formatted = selected.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
                       handleInputChange(showTimePicker.field, formatted);
                     }
                   }}
                 />
               )}
 
-              {/* LOCATION */}
+              {/* Location */}
               <View style={{ marginBottom: 14 }}>
                 <Text style={styles.inputLabel}>Location</Text>
                 <View style={styles.inputField}>
-                  <Picker
-                    selectedValue={scheduleForm.location}
-                    onValueChange={(v) => handleInputChange("location", v)}
-                  >
+                  <Picker selectedValue={scheduleForm.location} onValueChange={v => handleInputChange("location", v)}>
                     <Picker.Item label="Select location" value="" />
                     <Picker.Item label="Conference Room A" value="Conference Room A" />
                     <Picker.Item label="Conference Room B" value="Conference Room B" />
@@ -360,70 +352,29 @@ export default function CateringTab({ navigation }) {
                 </View>
               </View>
 
-              <Field
-                label="Number of Attendees"
-                value={scheduleForm.attendees}
-                onChange={(v) => handleInputChange("attendees", v)}
-                keyboardType="numeric"
-              />
-              <Field
-                label="Contact Name"
-                value={scheduleForm.contactName}
-                onChange={(v) => handleInputChange("contactName", v)}
-              />
-              <Field
-                label="Contact Phone"
-                value={scheduleForm.contactPhone}
-                onChange={(v) => handleInputChange("contactPhone", v)}
-                keyboardType="phone-pad"
-              />
-              <Field
-                label="Additional Notes"
-                value={scheduleForm.notes}
-                onChange={(v) => handleInputChange("notes", v)}
-              />
+              <Field label="Number of Attendees" value={scheduleForm.attendees} onChange={v => handleInputChange("attendees", v)} keyboardType="numeric" />
+              <Field label="Contact Name" value={scheduleForm.contactName} onChange={v => handleInputChange("contactName", v)} />
+              <Field label="Contact Phone" value={scheduleForm.contactPhone} onChange={v => handleInputChange("contactPhone", v)} keyboardType="phone-pad" />
+              <Field label="Additional Notes" value={scheduleForm.notes} onChange={v => handleInputChange("notes", v)} />
 
-              {/* MENU ITEMS */}
               <Text style={styles.menuTitle}>Select Menu Items</Text>
               <View style={styles.menuGrid}>
-                {menuItems.map((item) => {
+                {menuItems?.map(item => {
                   const selected = scheduleForm.selectedItems.includes(item.id);
                   return (
-                    <View
-                      key={item.id}
-                      style={[styles.menuCard, selected && styles.menuCardSelected]}
-                    >
+                    <View key={item.id} style={[styles.menuCard, selected && styles.menuCardSelected]}>
                       <TouchableOpacity onPress={() => toggleMenuItem(item.id)}>
-                        {item.image ? (
-                          <Image source={item.image} style={styles.menuImage} />
-                        ) : (
-                          <View style={styles.menuImagePlaceholder} />
-                        )}
-                        <Text
-                          style={[
-                            styles.menuCardText,
-                            selected && styles.menuCardTextSelected,
-                          ]}
-                        >
-                          {item.name}
-                        </Text>
+                        {item.image ? <Image source={item.image} style={styles.menuImage} /> : <View style={styles.menuImagePlaceholder} />}
+                        <Text style={[styles.menuCardText, selected && styles.menuCardTextSelected]}>{item.name}</Text>
                       </TouchableOpacity>
                       {selected && (
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            marginTop: 6,
-                          }}
-                        >
+                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
                           <Text style={{ marginRight: 8 }}>Qty:</Text>
                           <TextInput
                             keyboardType="numeric"
                             style={styles.qtyInput}
                             value={item.selectedQuantity.toString()}
-                            onChangeText={(val) =>
-                              handleQuantityChange(item.id, parseInt(val) || 1)
-                            }
+                            onChangeText={val => handleQuantityChange(item.id, parseInt(val) || 1)}
                           />
                         </View>
                       )}
@@ -435,11 +386,7 @@ export default function CateringTab({ navigation }) {
               <Pressable onPress={handleScheduleSubmit} style={styles.submitBtn}>
                 <Text style={styles.submitBtnText}>Submit</Text>
               </Pressable>
-
-              <Pressable
-                onPress={() => setModalVisible(false)}
-                style={styles.cancelBtn}
-              >
+              <Pressable onPress={() => setModalVisible(false)} style={styles.cancelBtn}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
             </ScrollView>
@@ -450,10 +397,8 @@ export default function CateringTab({ navigation }) {
   );
 }
 
-/* ----------------------
-   REUSABLE FIELD INPUT
------------------------ */
-const Field = ({ label, value, onChange, ...props }) => (
+/* ---------------------- Reusable Components ---------------------- */
+const Field = ({ label, value, onChange, editable = true, ...props }) => (
   <View style={{ marginBottom: 14 }}>
     <Text style={styles.inputLabel}>{label}</Text>
     <TextInput
@@ -461,14 +406,12 @@ const Field = ({ label, value, onChange, ...props }) => (
       onChangeText={onChange}
       placeholder={`Enter ${label.toLowerCase()}`}
       style={styles.inputField}
+      editable={editable}
       {...props}
     />
   </View>
 );
 
-/* ----------------------
-   REUSABLE TIME FIELD
------------------------ */
 const TimeField = ({ label, value, onPress }) => (
   <View style={{ marginBottom: 14 }}>
     <Text style={styles.inputLabel}>{label}</Text>
@@ -478,129 +421,35 @@ const TimeField = ({ label, value, onPress }) => (
   </View>
 );
 
-/* ----------------------
-   STYLES
------------------------ */
+/* ---------------------- Styles ---------------------- */
 const styles = StyleSheet.create({
-  loaderContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f9f9f9",
-  },
-  headerBackground: {
-    width: "100%",
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: "hidden",
-    paddingBottom: 8,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(254,192,117,0.5)",
-  },
+  loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f9f9f9" },
+  headerBackground: { width: "100%", borderBottomLeftRadius: 20, borderBottomRightRadius: 20, overflow: "hidden", paddingBottom: 8 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(254,192,117,0.5)" },
   headerContainer: { paddingTop: 50, paddingBottom: 14, paddingHorizontal: 14 },
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerTitle: { fontSize: 28, fontWeight: "700", color: "#333" },
-  scheduleBtn: {
-    backgroundColor: "#f97316",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  scheduleBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    textAlign: "center",
-    fontSize: 16,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: 16,
-  },
-  modalContent: { backgroundColor: "#fff", borderRadius: 12, padding: 20, maxHeight: "90%" },
-  modalTitle: { fontSize: 22, fontWeight: "700", marginBottom: 20, textAlign: "center", color: "#f97316" },
-
-  inputLabel: { marginBottom: 6, fontWeight: "600", color: "#555" },
-  inputField: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 10,
-    backgroundColor: "#f9f9f9",
-  },
-
-  menuTitle: { fontSize: 16, fontWeight: "700", marginVertical: 10 },
-  menuGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  menuCard: {
-    width: "48%",
-    backgroundColor: "#f9f9f9",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    marginBottom: 12,
-    overflow: "hidden",
-    alignItems: "center",
-    paddingBottom: 12,
-  },
-  menuCardSelected: { borderColor: "#f97316", backgroundColor: "#fff4e6" },
-  menuImage: {
-    width: "100%",
-    height: 100,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    resizeMode: "cover",
-  },
-  menuImagePlaceholder: {
-    width: "100%",
-    height: 100,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    backgroundColor: "#eee",
-  },
-  menuCardText: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    textAlign: "center",
-  },
+  scheduleBtn: { backgroundColor: "#f97316", paddingVertical: 14, borderRadius: 12, marginBottom: 20 },
+  scheduleBtnText: { color: "#fff", fontWeight: "700", textAlign: "center", fontSize: 16 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center" },
+  modalContent: { backgroundColor: "#fff", margin: 16, borderRadius: 12, padding: 16, maxHeight: "90%" },
+  modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 16, textAlign: "center" },
+  inputLabel: { fontWeight: "600", marginBottom: 4 },
+  inputField: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 10, backgroundColor: "#fff" },
+  menuTitle: { fontWeight: "700", fontSize: 16, marginBottom: 8 },
+  menuGrid: { flexDirection: "row", flexWrap: "wrap" },
+  menuCard: { width: "48%", margin: "1%", borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 8, alignItems: "center" },
+  menuCardSelected: { borderColor: "#f97316", backgroundColor: "#fff7f0" },
+  menuCardText: { marginTop: 4, textAlign: "center" },
   menuCardTextSelected: { fontWeight: "700", color: "#f97316" },
-
-  qtyInput: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 6,
-    padding: 4,
-    width: 50,
-    textAlign: "center",
-  },
-
-  submitBtn: { backgroundColor: "#f97316", paddingVertical: 14, borderRadius: 10, marginTop: 10 },
-  submitBtnText: { textAlign: "center", color: "#fff", fontWeight: "700", fontSize: 16 },
-  cancelBtn: { backgroundColor: "#ccc", paddingVertical: 14, borderRadius: 10, marginTop: 6 },
-  cancelBtnText: { textAlign: "center", color: "#333", fontWeight: "700", fontSize: 16 },
-
-  // Reserved event styles
-  eventCard: {
-    backgroundColor: "#fff",
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#f97316",
-    marginBottom: 6,
-  },
+  menuImage: { width: 80, height: 80, borderRadius: 8 },
+  menuImagePlaceholder: { width: 80, height: 80, backgroundColor: "#eee", borderRadius: 8 },
+  qtyInput: { borderWidth: 1, borderColor: "#ccc", width: 50, borderRadius: 4, padding: 4, textAlign: "center" },
+  submitBtn: { backgroundColor: "#f97316", padding: 12, borderRadius: 12, marginVertical: 12 },
+  submitBtnText: { color: "#fff", textAlign: "center", fontWeight: "700" },
+  cancelBtn: { backgroundColor: "#ccc", padding: 12, borderRadius: 12, marginBottom: 12 },
+  cancelBtnText: { textAlign: "center", fontWeight: "700" },
+  eventCard: { backgroundColor: "#fff", padding: 14, borderRadius: 12, marginBottom: 14, borderWidth: 1, borderColor: "#f0f0f0" },
+  eventTitle: { fontSize: 18, fontWeight: "700", marginBottom: 6 },
+  highlightedText: { fontWeight: "600", marginBottom: 2 },
 });

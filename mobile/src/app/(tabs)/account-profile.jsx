@@ -28,7 +28,6 @@ export default function AccountProfile() {
   const [profile, setProfile] = useState(null);
   const [creditPoints, setCreditPoints] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [passwordModal, setPasswordModal] = useState(false);
   const [creditModal, setCreditModal] = useState(false);
   const [specialOffers, setSpecialOffers] = useState([]);
 
@@ -79,7 +78,6 @@ export default function AccountProfile() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Map required_points → points for frontend usage
       const offers = res.data.offers.map(o => ({
         ...o,
         points: o.required_points,
@@ -121,36 +119,31 @@ export default function AccountProfile() {
 
   // --- Redeem offer ---
   const redeemOffer = async (offer) => {
-  try {
-    const token = await getValidToken();
-    if (!token) throw new Error('No access token');
+    try {
+      const token = await getValidToken();
+      if (!token) throw new Error('No access token');
 
-    const res = await api.post(
-  '/orders/redeem-offer/',
-  {
-    offer_id: offer.id,
-    points_used: offer.points // <-- must match backend
-  },
-  { headers: { Authorization: `Bearer ${token}` } }
-);
+      const res = await api.post(
+        '/orders/redeem-offer/',
+        { offer_id: offer.id, points_used: offer.points },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
+      setCreditPoints(res.data.remaining_points ?? creditPoints);
+      clearCart();
+      Alert.alert('Success', `You redeemed ${offer.name} for ${offer.points} points!`);
+      setCreditModal(false);
 
-    setCreditPoints(res.data.remaining_points ?? creditPoints);
-    clearCart();
-    Alert.alert('Success', `You redeemed ${offer.name} for ${offer.points} points!`);
-    setCreditModal(false);
-
-  } catch (err) {
-    console.error('redeemOffer error:', err.response?.data || err.message);
-    const message =
-      err.response?.data?.detail || // Django DRF usually returns 'detail'
-      err.response?.data?.message ||
-      err.message ||
-      'Failed to redeem the offer.';
-    Alert.alert('Error', message);
-  }
-};
-
+    } catch (err) {
+      console.error('redeemOffer error:', err.response?.data || err.message);
+      const message =
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to redeem the offer.';
+      Alert.alert('Error', message);
+    }
+  };
 
   // --- Pick avatar ---
   const pickAvatar = async () => {
@@ -205,11 +198,6 @@ export default function AccountProfile() {
 
         <TouchableOpacity onPress={() => { scrollRef.current?.scrollTo({ y: 0, animated: true }); setCreditModal(true); }}>
           <View style={styles.infoCard}><Ionicons name="cash-outline" size={22} color="#f97316" /><Text style={styles.infoText}>Credit Points: {Number(creditPoints).toFixed(2)}</Text></View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.passwordBtn} onPress={() => setPasswordModal(true)}>
-          <Ionicons name="key-outline" size={20} color="#fff" />
-          <Text style={styles.passwordText}>Change Password</Text>
         </TouchableOpacity>
       </View>
 
@@ -272,8 +260,6 @@ const styles = StyleSheet.create({
   infoContainer: { marginVertical: 16 },
   infoCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, backgroundColor: '#fff', padding: 12, borderRadius: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   infoText: { marginLeft: 8, fontSize: 16, color: '#111827' },
-  passwordBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f97316', padding: 10, borderRadius: 8, marginTop: 16 },
-  passwordText: { color: '#fff', marginLeft: 8, fontWeight: '700' },
   logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f97316', padding: 12, borderRadius: 8, marginTop: 20 },
   logoutText: { color: '#fff', marginLeft: 8, fontWeight: '700' },
   message: { fontSize: 16, color: '#555' },

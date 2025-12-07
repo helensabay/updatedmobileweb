@@ -29,7 +29,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 WebBrowser.maybeCompleteAuthSession();
 
 // ✅ Backend API base
-const LOCAL_IP = '192.168.1.11';
+const LOCAL_IP = '192.168.1.7';
 const API_BASE = `http://${LOCAL_IP}:8000/api/accounts`;
 
 export default function AccountLoginScreen() {
@@ -207,26 +207,26 @@ const handleLogin = async () => {
   }, [promptAsync, request, router]);
 
   // ✅ Guest login handler
-  const handleGuestEntry = useCallback(async () => {
-    if (guestLoading) return;
-    setGuestLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/guest-login/`);
-      const data = await response.json();
-      if (response.ok && data.success) {
-        Alert.alert('Guest Access', 'You are browsing as a guest user.', [
-          { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
-        ]);
-      } else {
-        Alert.alert('Unavailable', formatMessage(data.message));
-      }
-    } catch (error) {
-      console.error('Guest entry error:', error);
-      Alert.alert('Unavailable', formatMessage(error.message));
-    } finally {
-      setGuestLoading(false);
-    }
-  }, [router, guestLoading]);
+const handleGuestEntry = useCallback(async () => {
+  if (guestLoading) return;
+  setGuestLoading(true);
+
+  try {
+    const data = await getGuestToken();
+    console.log('Guest data received:', data); // 🔍 Debug
+
+    if (!data.access) throw new Error('No access token returned by backend');
+
+    Alert.alert('Guest Access', 'You are browsing as a guest user.', [
+      { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
+    ]);
+  } catch (error) {
+    console.error('Guest login frontend error:', error);
+    Alert.alert('Guest Login Failed', error.message || 'Cannot login as guest.');
+  } finally {
+    setGuestLoading(false);
+  }
+}, [guestLoading, router]);
 
   // ✅ Load fonts
   const [fontsLoaded] = useFonts({

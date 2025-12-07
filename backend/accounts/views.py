@@ -199,3 +199,48 @@ def password_reset_confirm(request):
     user.save()
 
     return Response({"message": "Password reset successful"}, status=status.HTTP_200_OK)
+from django.contrib.auth.models import User
+class GuestLoginView(APIView):
+    permission_classes = [AllowAny]  # ✅ This makes it public
+
+    def get(self, request):
+        # Create a guest user or get an existing one
+        guest_user, created = User.objects.get_or_create(username="guest_user")
+        if created:
+            guest_user.set_unusable_password()
+            guest_user.save()
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(guest_user)
+        return Response({
+            "success": True,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": guest_user.id,
+                "username": guest_user.username
+            }
+        })
+@api_view(['GET'])
+def guest_login(request):
+    """
+    Return JWT tokens for a guest user.
+    """
+    # Create or get a guest user
+    guest_user, created = User.objects.get_or_create(
+        username='guest',
+        defaults={'email': '', 'password': 'guest123'}
+    )
+
+    # Generate JWT tokens
+    refresh = RefreshToken.for_user(guest_user)
+
+    return Response({
+        'success': True,
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+        'user': {
+            'id': guest_user.id,
+            'username': guest_user.username,
+        }
+    })

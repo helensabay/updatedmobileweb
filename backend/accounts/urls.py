@@ -1,4 +1,7 @@
 from django.urls import path
+from . import views
+from .views import GuestLoginView
+
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     RegisterView,
@@ -18,6 +21,8 @@ urlpatterns = [
     path('update-avatar/', update_avatar, name='update-avatar'),
     path('change-password/', change_password, name='change-password'),
     path('profile/', ProfileView.as_view(), name='profile'),
+    path('guest-login/', views.guest_login, name='guest-login'),  # <--- this
+    path('guest-login/', GuestLoginView.as_view(), name='guest-login'),
 
     # PASSWORD RESET
     path('password-reset/', password_reset_request, name='password-reset'),

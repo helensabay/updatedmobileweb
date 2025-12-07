@@ -10,10 +10,10 @@ export const REFRESH_TOKEN_KEY = '@sanaol/auth/refreshToken';
 export const USER_CACHE_KEY = '@sanaol/auth/user';
 
 // Base URLs
-export const BASE_URL = `http://192.168.1.11:8000/api`;
-export const BASE_URL_MENU = `http://192.168.1.11:8000/api/menu`;
-export const BASE_URL_FEEDBACK = `http://192.168.1.11:8000`;
-const API_BASE = `http://192.168.1.11:8000/api/accounts`;
+export const BASE_URL = `http://192.168.1.7:8000/api`;
+export const BASE_URL_MENU = `http://192.168.1.7:8000/api/menu`;
+export const BASE_URL_FEEDBACK = `http://192.168.1.7:8000`;
+const API_BASE = `http://192.168.1.7:8000/api/accounts`;
 
 
 // Helper to get token
@@ -38,6 +38,37 @@ export async function refreshAccessToken() {
     throw err;
   }
 }
+export const getGuestToken = async () => {
+  try {
+    // Clear old tokens
+    await AsyncStorage.removeItem('accessToken');
+    await AsyncStorage.removeItem('refreshToken');
+
+    const res = await fetch(`${API_BASE}/guest-login/`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    // Parse response
+    const data = await res.json();
+
+    console.log('Guest login response:', data, 'status:', res.status); // 🔍 Debug
+
+    if (!res.ok) {
+      throw new Error(data.detail || 'Guest login failed');
+    }
+
+    // Save tokens if they exist
+    if (data.access) await AsyncStorage.setItem('accessToken', data.access);
+    if (data.refresh) await AsyncStorage.setItem('refreshToken', data.refresh);
+    if (data.user) await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user));
+
+    return data; // always return full object for safety
+  } catch (err) {
+    console.error('Guest login error:', err.message);
+    throw err;
+  }
+};
 
 // --------------------
 // Axios instances
@@ -159,6 +190,7 @@ export const createCateringEvent = async (payload) => {
     return { success: false, message: errorMsg };
   }
 };
+
 
 // --------------------
 // Auth APIs
@@ -327,7 +359,7 @@ try {
 const token = await getValidToken();
 if (!token) throw new Error('No valid token found. Please log in again.');
 
-const response = await axios.post(`http://192.168.1.11:8000/api/create_order/`, payload, {
+const response = await axios.post(`http://192.168.1.7:8000/api/create_order/`, payload, {
   headers: {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
@@ -387,6 +419,57 @@ const changePassword = async () => {
     Alert.alert('Error', 'Failed to change password.');
   }
 };
+// Cancel (Delete) Order
+
+export const cancelOrder = async (order) => {
+  // 1️⃣ Validate the order object
+  if (!order || !order.order_number) {
+    console.warn('Cancel failed: order number is missing', order);
+    Alert.alert('Error', 'Cannot cancel order: invalid order.');
+    return;
+  }
+
+  const orderNumber = order.order_number;
+
+  // 2️⃣ Ask user for confirmation
+  Alert.alert(
+    "Cancel Order",
+    "Are you sure you want to cancel this order?",
+    [
+      { text: "No" },
+      {
+        text: "Yes",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            // 3️⃣ Get a valid token
+            const token = await getValidToken();
+            if (!token) throw new Error('No valid token. Please log in again.');
+
+            // 4️⃣ Call backend DELETE API
+            await api.delete(`/orders/${orderNumber}/cancel/`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+
+            Alert.alert('Success', 'Order canceled successfully!');
+
+            // 5️⃣ Refresh orders list (optional)
+            if (typeof fetchUserOrders === 'function') {
+              await fetchUserOrders();
+            }
+          } catch (err) {
+            console.error('Cancel order failed:', err.response?.data || err.message);
+            Alert.alert(
+              'Error',
+              err.response?.data?.message || 'Failed to cancel order.'
+            );
+          }
+        },
+      },
+    ]
+  );
+};
+
 const pickImage = async () => {
   let result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: [ImagePicker.MediaType.image],
@@ -560,16 +643,17 @@ export const fetchFeedback = async () => {
     return [];
   }
 };
-
 export const getGcashLink = async (orderNumber) => {
   try {
-    const response = await api.get(`/orders/${orderNumber}/gcash_link/`);
-    return response.data;
+    const res = await api.get(`/orders/${orderNumber}/gcash_link/`);
+    return res.data; // expected: { success: true, payment_url: 'gcash://...' }
   } catch (err) {
     console.log('getGcashLink error:', err.response?.data || err.message);
     throw err;
   }
 };
+// api.js
+
 // --------------------
 // Current user
 // --------------------
@@ -715,5 +799,29 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Fetch catering events for a specific client
+export const fetchCateringEvents = async (clientName) => {
+  try {
+    const token = await getValidToken();
+    if (!token) throw new Error('No valid token. Please log in again.');
+
+    // Call the backend endpoint for this user
+    const res = await api.get(`/catering-events/user-events/${encodeURIComponent(clientName)}/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (Array.isArray(res.data)) return res.data;
+
+    // Optional: if backend wraps it like { events: [...] }
+    if (res.data.events) return res.data.events;
+
+    return [];
+  } catch (err) {
+    console.error('fetchCateringEvents error:', err.response?.data || err.message);
+    return [];
+  }
+};
+
 
 export default api; 

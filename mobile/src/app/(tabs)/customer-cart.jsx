@@ -10,7 +10,6 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../../context/CartContext';
@@ -29,8 +28,6 @@ export default function CustomerCartScreen() {
   const [selectedTime, setSelectedTime] = useState(null);
   const [loading, setLoading] = useState(false);
   const [customerName, setCustomerName] = useState('');
-  const [voucherCode, setVoucherCode] = useState('');
-  const [discountAmount, setDiscountAmount] = useState(0);
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
 
@@ -42,7 +39,7 @@ export default function CustomerCartScreen() {
     return sum + price * qty;
   }, 0);
 
-  const finalTotal = Math.max(total - discountAmount, 0);
+  const finalTotal = total;
 
   const pickupTimes = ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM'];
 
@@ -69,33 +66,6 @@ export default function CustomerCartScreen() {
   }, []);
 
   // ------------------------------
-  // HANDLE VOUCHER CODE
-  // ------------------------------
-  const applyVoucher = async () => {
-    if (!voucherCode) return Alert.alert('Error', 'Please enter a voucher code.');
-
-    try {
-      const token = await getValidToken();
-      const res = await api.post(
-        '/orders/apply-voucher/',
-        { code: voucherCode },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (res.data.success) {
-        setDiscountAmount(res.data.discount_amount ?? 0);
-        Alert.alert('Success', `Voucher applied! You saved ₱${res.data.discount_amount}`);
-      } else {
-        setDiscountAmount(0);
-        Alert.alert('Invalid Voucher', res.data.message || 'Voucher code is not valid.');
-      }
-    } catch (err) {
-      console.error('Voucher Error:', err);
-      Alert.alert('Error', 'Failed to apply voucher. Please try again.');
-    }
-  };
-
-  // ------------------------------
   // HANDLE ORDER
   // ------------------------------
   const handleProceed = () => {
@@ -115,83 +85,78 @@ export default function CustomerCartScreen() {
   };
 
   const goToPayment = async () => {
-  setLoading(true);
-  try {
-    const token = await getValidToken();
-    if (!token) throw new Error('No valid token found.');
+    setLoading(true);
+    try {
+      const token = await getValidToken();
+      if (!token) throw new Error('No valid token found.');
 
-    // Convert selectedTime to ISO
-    const [hour, minutePart] = selectedTime.split(':');
-    let [minute, ampm] = minutePart.split(' ');
-    let hour24 = parseInt(hour, 10);
-    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
-    const now = new Date();
-    const pickupDate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      hour24,
-      parseInt(minute, 10),
-      0
-    );
+      // Convert selectedTime to ISO
+      const [hour, minutePart] = selectedTime.split(':');
+      let [minute, ampm] = minutePart.split(' ');
+      let hour24 = parseInt(hour, 10);
+      if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+      if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+      const now = new Date();
+      const pickupDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        hour24,
+        parseInt(minute, 10),
+        0
+      );
 
-    // Calculate subtotal (before discount)
-    const subtotal = cart.reduce(
-      (sum, item) => sum + parseFloat(item.price) * Number(item.quantity),
-      0
-    );
+      // Calculate subtotal
+      const subtotal = cart.reduce(
+        (sum, item) => sum + parseFloat(item.price) * Number(item.quantity),
+        0
+      );
 
-    const payload = {
-      customer_name: customerName,
-      order_type: 'pickup',
-      subtotal: subtotal,                // add subtotal
-      total_amount: finalTotal,          // after discount
-      discount_applied: discountAmount,
-      payment_method: 'pending',         // default, updated later
-      voucher_code: voucherCode || null,
-      promised_time: pickupDate.toISOString(),
-      items: cart.map((item) => ({
-        menu_item_id: item.id,
-        name: item.name,
-        price: parseFloat(item.price),
-        quantity: Number(item.quantity),
-        size: item.size || null,
-        customize: item.customize || null,
-      })),
-    };
+      const payload = {
+        customer_name: customerName,
+        order_type: 'pickup',
+        subtotal: subtotal,
+        total_amount: finalTotal,
+        payment_method: 'pending',
+        promised_time: pickupDate.toISOString(),
+        items: cart.map((item) => ({
+          menu_item_id: item.id,
+          name: item.name,
+          price: parseFloat(item.price),
+          quantity: Number(item.quantity),
+          size: item.size || null,
+          customize: item.customize || null,
+        })),
+      };
 
-    const res = await createOrder(payload);
-    if (!res.success) {
-      Alert.alert('Order Error', res.message || 'Failed to create order');
+      const res = await createOrder(payload);
+      if (!res.success) {
+        Alert.alert('Order Error', res.message || 'Failed to create order');
+        setLoading(false);
+        return;
+      }
+
+      setOrderStatus('pending');
+
+      router.push({
+        pathname: '/cart/payment',
+        params: {
+          orderType: 'pickup',
+          total: finalTotal.toFixed(2),
+          selectedTime,
+          orderId: res.order_number,
+        },
+      });
+    } catch (err) {
+      console.error('Create Order Error:', err);
+      Alert.alert('Order Error', err.message || 'Unable to create order. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Set live status to pending initially
-    setOrderStatus('pending');
-
-    // Navigate to Payment screen
-    router.push({
-      pathname: '/cart/payment',
-      params: {
-        orderType: 'pickup',
-        total: finalTotal.toFixed(2),
-        selectedTime,
-        orderId: res.order_number,
-        discountApplied: discountAmount.toFixed(2),
-      },
-    });
-  } catch (err) {
-    console.error('Create Order Error:', err);
-    Alert.alert('Order Error', err.message || 'Unable to create order. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // ------------------------------
-  // RENDER FOODPANDA-STYLE STATUS
+  // STATUS TRACKER
   // ------------------------------
   const statusSteps = ['pending', 'in_prep', 'in_progress', 'ready', 'completed'];
 
@@ -224,7 +189,7 @@ export default function CustomerCartScreen() {
   };
 
   // ------------------------------
-  // RENDER CART ITEMS
+  // CART ITEM RENDER
   // ------------------------------
   const renderItem = ({ item }) => (
     <View style={styles.card}>
@@ -250,22 +215,7 @@ export default function CustomerCartScreen() {
 
   const renderFooter = () => (
     <View>
-      <View style={styles.voucherContainer}>
-        <TextInput
-          style={styles.voucherInput}
-          placeholder="Enter voucher code"
-          value={voucherCode}
-          onChangeText={setVoucherCode}
-        />
-        <TouchableOpacity style={styles.applyBtn} onPress={applyVoucher}>
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Apply</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={{ paddingHorizontal: 12, marginTop: 14 }}>
-        {discountAmount > 0 && (
-          <Text style={styles.discountApplied}>Discount Applied: -₱{discountAmount}</Text>
-        )}
         <Text style={styles.finalTotal}>Final Total: ₱{finalTotal}</Text>
       </View>
 
@@ -294,7 +244,6 @@ export default function CustomerCartScreen() {
         </ScrollView>
       </View>
 
-      {/* Status Tracker */}
       {renderStatusTracker()}
     </View>
   );
@@ -351,6 +300,9 @@ export default function CustomerCartScreen() {
   );
 }
 
+// ------------------------------
+// STYLES
+// ------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fdfdfd' },
   headerBackground: { width: '100%', borderBottomLeftRadius: 20, borderBottomRightRadius: 20, overflow: 'hidden', paddingBottom: 8 },
@@ -374,10 +326,6 @@ const styles = StyleSheet.create({
   pickupTimeBtn: { borderWidth: 1, borderColor: '#f97316', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 12, marginRight: 10, marginBottom: 10 },
   pickupTimeSelected: { backgroundColor: '#f97316' },
   pickupTimeText: { fontSize: 14, fontFamily: 'Roboto_400Regular', color: '#333' },
-  voucherContainer: { flexDirection: 'row', marginVertical: 14, paddingHorizontal: 12 },
-  voucherInput: { flex: 1, borderWidth: 1, borderColor: '#f97316', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
-  applyBtn: { backgroundColor: '#f97316', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' },
-  discountApplied: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#c0392b' },
   finalTotal: { fontSize: 20, fontFamily: 'Roboto_700Bold', color: '#27ae60', marginTop: 8, paddingHorizontal: 12 },
   proceedBtn: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#27ae60', paddingVertical: 14, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4 },
   proceedText: { color: '#fff', fontFamily: 'Roboto_700Bold', fontSize: 16 },

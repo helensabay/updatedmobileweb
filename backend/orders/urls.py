@@ -9,6 +9,7 @@ urlpatterns = [
     path('user-credit-points/', views.user_credit_points, name='user-credit-points'),
     path('redeem-offer/', views.redeem_offer, name='redeem_offer'),
     path('api/offers/', views.list_special_offers, name='offers'),
+    path('orders/<str:order_number>/cancel/', views.cancel_order, name='cancel-order'),
 
     path('orders/<str:order_number>/', views.get_order, name='get-order'),
     path('orders/<str:order_number>/status/', views.order_status, name='order-status'),

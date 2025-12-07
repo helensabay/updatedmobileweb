@@ -16,6 +16,7 @@ class PendingUserGateMiddleware:
     """
 
     PUBLIC_PATHS = {
+        "/api/accounts/guest-login/",
         "/api/offers/",
         "/api/catering-events/",
         "/api/orders/redeem-offer/",

@@ -19,6 +19,7 @@ from datetime import timedelta
 from django.utils import timezone as dj_tz
 import uuid
 from menu.models import MenuItem  # adjust import to your menu app
+from django.views.decorators.http import require_POST
 
 # ------------------------------
 # ✅ CREATE ORDER
@@ -59,11 +60,19 @@ def order_status(request, order_number):
 
 
 # api/views.py
+from django.contrib.auth.decorators import login_required
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import traceback
-
+@require_POST
+def cancel_order(request, order_number):
+    # Fetch order without checking user
+    order = get_object_or_404(Order, order_number=order_number)
+    order.status = 'cancelled'
+    order.save()
+    return JsonResponse({'message': f'Order {order_number} cancelled successfully.'})
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_order(request, order_number):
