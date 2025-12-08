@@ -1,5 +1,7 @@
-import random
+import random,string
 import base64
+from django.contrib.auth import get_user_model
+
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
@@ -200,6 +202,8 @@ def password_reset_confirm(request):
 
     return Response({"message": "Password reset successful"}, status=status.HTTP_200_OK)
 from django.contrib.auth.models import User
+User = get_user_model()  # 👈 always use this
+
 class GuestLoginView(APIView):
     permission_classes = [AllowAny]  # ✅ This makes it public
 
@@ -221,26 +225,28 @@ class GuestLoginView(APIView):
                 "username": guest_user.username
             }
         })
+
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def guest_login(request):
-    """
-    Return JWT tokens for a guest user.
-    """
-    # Create or get a guest user
-    guest_user, created = User.objects.get_or_create(
-        username='guest',
-        defaults={'email': '', 'password': 'guest123'}
+    # Generate dummy email
+    guest_email = f"guest_{User.objects.count() + 1}@guest.local"
+
+    # Generate random password
+    password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+
+    # Create guest user using required fields only
+    guest_user = User.objects.create_user(
+        email=guest_email,
+        password=password
     )
 
     # Generate JWT tokens
     refresh = RefreshToken.for_user(guest_user)
+    access = refresh.access_token
 
     return Response({
-        'success': True,
-        'access': str(refresh.access_token),
-        'refresh': str(refresh),
-        'user': {
-            'id': guest_user.id,
-            'username': guest_user.username,
-        }
-    })
+        "access": str(access),
+        "refresh": str(refresh),
+        "user": {"id": guest_user.id, "email": guest_user.email}
+    }, status=status.HTTP_200_OK)

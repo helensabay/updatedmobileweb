@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { storeTokens, USER_CACHE_KEY } from '../api/api'; // Adjust path if needed
+import { storeTokens, USER_CACHE_KEY, getGuestToken } from '../api/api';
 
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
