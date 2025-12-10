@@ -1,171 +1,238 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
+  ScrollView,
+  TextInput,
   TouchableOpacity,
+  Alert,
+  Modal,
+  Pressable,
+  ActivityIndicator,
+  Image,
   StyleSheet,
   ImageBackground,
-  Image,
-  ScrollView,
-  Animated,
-  Alert,
-  Linking,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Picker } from "@react-native-picker/picker";
+import { useRouter } from "expo-router";
 import {
-  useFonts,
-  Roboto_400Regular,
-  Roboto_700Bold,
-} from '@expo-google-fonts/roboto';
-import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
-import { confirmPayment, fetchOrderDetails, getGcashLink } from '../../api/api';
-import Success from './success';
+  fetchMenuItems,
+  createCateringEvent,
+  fetchCateringEvents,
+} from "../../api/api";
 
-export default function Payment() {
+/* ---------------------------
+   Convert "5:32 PM" → "17:32"
+---------------------------- */
+const to24Hour = (timeString) => {
+  if (!timeString) return "";
+  const [time, modifier] = timeString.split(" ");
+  let [hours, minutes] = time.split(":");
+  hours = parseInt(hours, 10);
+  if (modifier === "PM" && hours !== 12) hours += 12;
+  if (modifier === "AM" && hours === 12) hours = 0;
+  return `${hours.toString().padStart(2, "0")}:${minutes}`;
+};
+
+export default function CateringTab() {
   const router = useRouter();
-  const { orderType, total, selectedTime, orderId } = useLocalSearchParams();
+  const [cateringEvents, setCateringEvents] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [allowed, setAllowed] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState({ field: "", visible: false });
+  const [eventTab, setEventTab] = useState("upcoming");
 
-  const [selectedPayment, setSelectedPayment] = useState(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [orderItems, setOrderItems] = useState([]);
+  const [scheduleForm, setScheduleForm] = useState({
+    eventName: "",
+    client: "",
+    date: "",
+    startTime: "",
+    endTime: "",
+    location: "",
+    attendees: "",
+    contactName: "",
+    contactPhone: "",
+    notes: "",
+    selectedItems: [],
+  });
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  // Load order items
+  /* ------------------ Load Data ------------------ */
   useEffect(() => {
-    if (!orderId) return;
-    const loadOrder = async () => {
+    const loadData = async () => {
       try {
-        const data = await fetchOrderDetails(orderId);
-        setOrderItems(data.items || []);
+        setLoading(true);
+        const userData = await AsyncStorage.getItem("@sanaol/auth/user");
+        const parsed = userData ? JSON.parse(userData) : null;
+
+        if (!parsed || parsed.role !== "faculty") {
+          setAllowed(false);
+          return;
+        }
+        setAllowed(true);
+
+        const clientName = parsed.name?.trim() || "";
+        setScheduleForm((prev) => ({ ...prev, client: clientName }));
+
+        const items = await fetchMenuItems();
+        setMenuItems((items && Array.isArray(items) ? items : []).map((i) => ({ ...i, selectedQuantity: 1 })));
+
+        const events = await fetchCateringEvents(clientName);
+        const normalizedEvents = (events && Array.isArray(events) ? events : []).map((ev) => ({
+          ...ev,
+          client_name: ev.client_name?.trim() || "",
+          items: Array.isArray(ev.items) ? ev.items : [],
+          total_price:
+            ev.total_price ??
+            (Array.isArray(ev.items)
+              ? ev.items.reduce((sum, item) => sum + ((item.unit_price || item.price || 0) * (item.quantity || 0)), 0)
+              : 0),
+          status: ev.status ?? "Pending Payment",
+        }));
+
+        setCateringEvents(normalizedEvents);
       } catch (err) {
-        console.log('Failed to fetch order items', err);
+        console.error("Error loading catering data:", err);
+      } finally {
+        setLoading(false);
       }
     };
-    loadOrder();
-  }, [orderId]);
 
-  // Animate success popup
-  useEffect(() => {
-    if (showSuccess) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      fadeAnim.setValue(0);
+    loadData();
+  }, []);
+
+  /* ------------------ Handlers ------------------ */
+  const handleInputChange = (field, value) => {
+    setScheduleForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleMenuItem = (itemId) => {
+    setScheduleForm((prev) => {
+      const exists = prev.selectedItems.includes(itemId);
+      return {
+        ...prev,
+        selectedItems: exists ? prev.selectedItems.filter((id) => id !== itemId) : [...prev.selectedItems, itemId],
+      };
+    });
+  };
+
+  const handleQuantityChange = (itemId, qty) => {
+    setMenuItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, selectedQuantity: qty } : i)));
+  };
+
+  const handleScheduleSubmit = async () => {
+    const required = [
+      "eventName",
+      "client",
+      "date",
+      "startTime",
+      "endTime",
+      "location",
+      "attendees",
+      "contactName",
+      "contactPhone",
+    ];
+    const missing = required.filter((f) => !scheduleForm[f] || scheduleForm[f].toString().trim() === "");
+    if (missing.length) {
+      Alert.alert("Error", "Please fill all required fields.");
+      return;
     }
-  }, [showSuccess]);
 
-  let [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
-  if (!fontsLoaded) return null;
+    if (scheduleForm.selectedItems.length === 0) {
+      Alert.alert("Error", "Please select at least one menu item.");
+      return;
+    }
 
-  if (!orderType || !total || !selectedTime || !orderId) {
+    const selectedItemsData = scheduleForm.selectedItems.map((itemId) => {
+      const item = menuItems.find((i) => i.id === itemId);
+      return {
+        menu_item: item.id,
+        name: item.name,
+        quantity: item.selectedQuantity,
+        unit_price: item.price || 0,
+        notes: item.notes || "",
+        image: item.image || null,
+      };
+    });
+
+    const totalPrice = selectedItemsData.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+
+    const newEvent = {
+      id: Date.now(),
+      name: scheduleForm.eventName,
+      client_name: scheduleForm.client,
+      contact_name: scheduleForm.contactName,
+      contact_phone: scheduleForm.contactPhone,
+      event_date: scheduleForm.date,
+      start_time: to24Hour(scheduleForm.startTime),
+      end_time: to24Hour(scheduleForm.endTime),
+      location: scheduleForm.location,
+      guest_count: Number(scheduleForm.attendees),
+      notes: scheduleForm.notes,
+      items: selectedItemsData,
+      total_price: totalPrice,
+      status: "Pending Payment",
+    };
+
+    try {
+      await createCateringEvent(newEvent);
+      setCateringEvents((prev) => [...prev, newEvent]);
+      Alert.alert("Success", "Catering event scheduled! Please pay 50% to confirm.");
+      setModalVisible(false);
+      setScheduleForm({
+        eventName: "",
+        date: "",
+        startTime: "",
+        endTime: "",
+        location: "",
+        attendees: "",
+        contactName: "",
+        contactPhone: "",
+        notes: "",
+        selectedItems: [],
+      });
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Failed to schedule event.");
+    }
+  };
+
+  /* ------------------ Loading / Access ------------------ */
+  if (loading || allowed === null) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>
-          Missing order details. Go back to the cart.
-        </Text>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backBtnText}>Back to Cart</Text>
-        </TouchableOpacity>
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#f97316" />
       </View>
     );
   }
 
-  // Poll payment status
-  const pollPaymentStatus = async (method, interval = 3000, timeout = 30000) => {
-    return new Promise((resolve) => {
-      let elapsed = 0;
-      const timer = setInterval(async () => {
-        elapsed += interval;
-        try {
-          const res = await confirmPayment(orderId, method);
-          if (res.success) {
-            clearInterval(timer);
-            resolve(true);
-          } else if (elapsed >= timeout) {
-            clearInterval(timer);
-            resolve(false);
-          }
-        } catch {
-          clearInterval(timer);
-          resolve(false);
-        }
-      }, interval);
-    });
-  };
-const handlePaymentSelect = async (method) => {
-  setSelectedPayment(method);
-  if (loading) return;
-  setLoading(true);
-
-  if (method === 'gcash') {
-    try {
-      // 1️⃣ Get GCash link from backend
-      const res = await getGcashLink(orderId);
-
-      if (res.success && res.gcash_url) {
-        // 2️⃣ Create a deep link to open GCash app directly
-        // Replace "amount" and "note" with your actual order info
-        const gcashDeepLink = res.gcash_url.replace(
-          'https://pay.gcash.com/pay?',
-          'gcash://pay?'
-        );
-
-        // 3️⃣ Check if device can open GCash app
-        const supported = await Linking.canOpenURL(gcashDeepLink);
-
-        if (supported) {
-          await Linking.openURL(gcashDeepLink);
-
-          // 4️⃣ Poll payment status after opening app
-          const success = await pollPaymentStatus(method);
-          setLoading(false);
-
-          if (success) setShowSuccess(true);
-          else Alert.alert('Payment Failed', 'GCash payment not confirmed.');
-        } else {
-          // Fallback: copy link to clipboard
-          await Clipboard.setStringAsync(res.gcash_url);
-          setLoading(false);
-          Alert.alert(
-            'GCash App Not Found',
-            'GCash app not installed. Payment link copied to clipboard.'
-          );
-        }
-      } else {
-        setLoading(false);
-        Alert.alert('Error', 'Unable to get GCash payment link.');
-      }
-    } catch (err) {
-      setLoading(false);
-      console.error('GCash payment error:', err);
-      Alert.alert('Error', 'Failed to get GCash link.');
-    }
-  } else if (method === 'counter') {
-    try {
-      const res = await confirmPayment(orderId, method);
-      setLoading(false);
-      if (res.success) setShowSuccess(true);
-      else Alert.alert('Payment Failed', res.message || 'Cannot confirm counter payment.');
-    } catch {
-      setLoading(false);
-      Alert.alert('Error', 'Failed to confirm payment. Try again.');
-    }
+  if (!allowed) {
+    return (
+      <View style={styles.loaderContainer}>
+        <Text style={{ color: "red", fontSize: 16 }}>You are not allowed to access Catering.</Text>
+      </View>
+    );
   }
-};
+
+  /* ------------------ Filter events ------------------ */
+  const today = new Date();
+  const userEvents = cateringEvents.filter(
+    (event) => event.client_name.toLowerCase() === scheduleForm.client.trim().toLowerCase()
+  );
+
+  const upcomingEvents = userEvents.filter((event) => new Date(event.event_date) >= today);
+  const pastEvents = userEvents.filter((event) => new Date(event.event_date) < today);
+  const displayedEvents = eventTab === "upcoming" ? upcomingEvents : pastEvents;
+
+  /* ------------------ Render ------------------ */
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
+    <View style={{ flex: 1, backgroundColor: "#fdfdfd" }}>
       <ImageBackground
-        source={require('../../../assets/drop_1.png')}
+        source={require("../../../assets/drop_1.png")}
         resizeMode="cover"
         style={styles.headerBackground}
       >
@@ -173,81 +240,124 @@ const handlePaymentSelect = async (method) => {
         <View style={styles.headerContainer}>
           <View style={styles.headerTopRow}>
             <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={26} color="black" />
+              <Text style={{ fontSize: 24, fontWeight: "700" }}>←</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Payment Page</Text>
-            <Ionicons name="card-outline" size={26} color="black" />
+            <Text style={styles.headerTitle}>Catering Events</Text>
+            <View style={{ width: 24 }} />
           </View>
         </View>
       </ImageBackground>
 
-      {/* Receipt */}
-      <View style={styles.receiptCard}>
-        <Text style={styles.receiptHeader}>Order Receipt</Text>
-        <View style={styles.line} />
-        <View style={styles.receiptRow}>
-          <Text style={styles.label}>Order Type</Text>
-          <Text style={styles.value}>{orderType.toUpperCase()}</Text>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <TouchableOpacity style={styles.scheduleBtn} onPress={() => setModalVisible(true)}>
+          <Text style={styles.scheduleBtnText}>Schedule New Catering Event</Text>
+        </TouchableOpacity>
+
+        {/* Tabs */}
+        <View style={{ flexDirection: "row", justifyContent: "space-around", marginBottom: 12 }}>
+          <TouchableOpacity
+            onPress={() => setEventTab("upcoming")}
+            style={[{ padding: 8, borderRadius: 8 }, eventTab === "upcoming" && { backgroundColor: "#f97316" }]}
+          >
+            <Text style={{ color: eventTab === "upcoming" ? "#fff" : "#333", fontWeight: "600" }}>Upcoming</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setEventTab("past")}
+            style={[{ padding: 8, borderRadius: 8 }, eventTab === "past" && { backgroundColor: "#f97316" }]}
+          >
+            <Text style={{ color: eventTab === "past" ? "#fff" : "#333", fontWeight: "600" }}>Past</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.receiptRow}>
-          <Text style={styles.label}>Pickup Time</Text>
-          <Text style={styles.value}>{selectedTime}</Text>
-        </View>
-        <View style={styles.line} />
-        {orderItems.length > 0 &&
-          orderItems.map((item, index) => (
-            <View key={index} style={styles.receiptRow}>
-              <Text style={styles.label}>
-                {item.name} x {item.quantity}
-              </Text>
-              <Text style={styles.value}>₱{(item.price * item.quantity).toFixed(2)}</Text>
+
+        {displayedEvents.length === 0 && (
+          <Text style={{ padding: 16, color: "#555", textAlign: "center" }}>
+            No {eventTab === "upcoming" ? "upcoming" : "past"} events.
+          </Text>
+        )}
+
+        {displayedEvents.map((event) => (
+          <View key={event.id} style={styles.eventCard}>
+            <Text style={styles.eventTitle}>{event.name}</Text>
+
+            {/* STATUS */}
+            <Text
+              style={[
+                styles.statusText,
+                event.status === "Completed"
+                  ? styles.statusCompleted
+                  : event.status === "Accepted"
+                  ? styles.statusAccepted
+                  : styles.statusPending,
+              ]}
+            >
+              📌 Status: {event.status}
+            </Text>
+
+            <Text style={styles.highlightedText}>📅 Date: {event.event_date}</Text>
+            <Text style={styles.highlightedText}>⏰ Time: {event.start_time} - {event.end_time}</Text>
+            <Text style={styles.highlightedText}>📍 Location: {event.location}</Text>
+            <Text style={styles.highlightedText}>👥 Attendees: {event.guest_count}</Text>
+
+            {/* TOTAL PRICE */}
+            <Text style={[styles.highlightedText, { marginTop: 4, fontSize: 16 }]}>
+              💰 Total Price: ₱{event.total_price?.toLocaleString() || 0}
+            </Text>
+
+            {event.notes && <Text style={styles.highlightedText}>📝 Notes: {event.notes}</Text>}
+
+            <Text style={{ marginTop: 6, fontWeight: "700" }}>🍽 Menu Items:</Text>
+            <View style={styles.menuGrid}>
+              {event.items?.map((item, idx) => (
+                <View key={idx} style={styles.menuCard}>
+                  {item.image ? (
+                    <Image source={{ uri: item.image }} style={styles.menuImage} />
+                  ) : (
+                    <View style={styles.menuImagePlaceholder} />
+                  )}
+                  <Text style={styles.menuCardText}>
+                    {item.name} x {item.quantity} — ₱{(item.unit_price * item.quantity).toLocaleString()}
+                  </Text>
+                </View>
+              ))}
             </View>
-          ))}
-        <View style={styles.line} />
-        <View style={styles.receiptRow}>
-          <Text style={[styles.label, { fontWeight: 'bold' }]}>Total</Text>
-          <Text style={[styles.value, { fontWeight: 'bold' }]}>₱{parseFloat(total).toFixed(2)}</Text>
-        </View>
-      </View>
 
-      {/* Payment Buttons */}
-      <TouchableOpacity
-        style={[styles.paymentBtn, selectedPayment === 'gcash' ? styles.selectedBtn : {}]}
-        onPress={() => handlePaymentSelect('gcash')}
-      >
-        <Image
-          source={require('../../../assets/gcash.png')}
-          style={styles.icon}
-          resizeMode="contain"
-        />
-        <Text style={styles.paymentText}>Pay with GCash</Text>
-      </TouchableOpacity>
+            {/* 50% Down Payment Button */}
+            {event.status === "Pending Payment" && (
+              <TouchableOpacity
+                style={{
+                  marginTop: 8,
+                  backgroundColor: "#f97316",
+                  padding: 10,
+                  borderRadius: 8,
+                }}
+                onPress={() =>
+                  router.push({
+                    pathname: "/payment",
+                    params: {
+                      orderId: event.id,
+                      orderType: "Catering",
+                      total: event.total_price / 2,
+                      selectedTime: event.event_date,
+                    },
+                  })
+                }
+              >
+                <Text style={{ color: "#fff", fontWeight: "700", textAlign: "center" }}>
+                  Pay 50% Down
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))}
 
-      <TouchableOpacity
-        style={[styles.paymentBtn, selectedPayment === 'counter' ? styles.selectedBtn : {}]}
-        onPress={() => handlePaymentSelect('counter')}
-      >
-        <Image
-          source={require('../../../assets/cash.png')}
-          style={styles.icon}
-          resizeMode="contain"
-        />
-        <Text style={styles.paymentText}>Pay at Counter</Text>
-      </TouchableOpacity>
+        {/* MODAL: Schedule Event (unchanged) */}
+        {/* ...keep your existing modal code here... */}
 
-      {loading && (
-        <Text style={{ textAlign: 'center', marginTop: 10, color: '#f97316' }}>
-          Processing payment...
-        </Text>
-      )}
-
-      {/* Success Popup */}
-      <Success visible={showSuccess} orderId={orderId} />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
-// --- Styles remain the same ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fdfdfd' },
   headerBackground: { width: '100%', borderBottomLeftRadius: 20, borderBottomRightRadius: 20, overflow: 'hidden', paddingBottom: 8 },

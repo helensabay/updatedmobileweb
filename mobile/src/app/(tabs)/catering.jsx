@@ -16,7 +16,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
-import { fetchMenuItems, createCateringEvent, fetchCateringEvents } from "../../api/api";
+import { fetchMenuItems, createCateringEvent, fetchCateringEvents, updateCateringEventPayment } from "../../api/api";
 
 /* ---------------------------
    Convert "5:32 PM" → "17:32"
@@ -39,7 +39,7 @@ export default function CateringTab({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState({ field: "", visible: false });
-  const [eventTab, setEventTab] = useState("upcoming"); // "upcoming" or "past"
+  const [eventTab, setEventTab] = useState("upcoming");
 
   const [scheduleForm, setScheduleForm] = useState({
     eventName: "",
@@ -61,7 +61,6 @@ export default function CateringTab({ navigation }) {
       try {
         setLoading(true);
 
-        // 1️⃣ Get logged-in user
         const userData = await AsyncStorage.getItem("@sanaol/auth/user");
         const parsed = userData ? JSON.parse(userData) : null;
 
@@ -71,23 +70,27 @@ export default function CateringTab({ navigation }) {
         }
         setAllowed(true);
 
-        // 2️⃣ Auto-fill client
         const clientName = parsed.name?.trim() || "";
         setScheduleForm(prev => ({ ...prev, client: clientName }));
 
-        // 3️⃣ Fetch menu items
         const items = await fetchMenuItems();
         setMenuItems((items && Array.isArray(items) ? items : []).map(i => ({ ...i, selectedQuantity: 1 })));
 
-        // 4️⃣ Fetch existing events for this client
         const events = await fetchCateringEvents(clientName);
-        console.log("Fetched events:", events);
 
-        // 5️⃣ Normalize client_name and ensure items array exists
         const normalizedEvents = (events && Array.isArray(events) ? events : []).map(ev => ({
           ...ev,
           client_name: ev.client_name?.trim() || "",
           items: Array.isArray(ev.items) ? ev.items : [],
+          total_price: ev.total_price ??
+            (Array.isArray(ev.items)
+              ? ev.items.reduce(
+                  (sum, item) => sum + ((item.unit_price || item.price || 0) * (item.quantity || 0)),
+                  0
+                )
+              : 0),
+          status: ev.status ?? "Pending",
+          paid_amount: ev.paid_amount ?? 0,
         }));
 
         setCateringEvents(normalizedEvents);
@@ -125,6 +128,7 @@ export default function CateringTab({ navigation }) {
     );
   };
 
+  /* ------------------ Schedule Event with 50% Down Payment ------------------ */
   const handleScheduleSubmit = async () => {
     const required = [
       "eventName", "client", "date", "startTime", "endTime",
@@ -154,46 +158,106 @@ export default function CateringTab({ navigation }) {
       };
     });
 
-    const newEvent = {
-      id: Date.now(),
-      name: scheduleForm.eventName,
-      client_name: scheduleForm.client,
-      contact_name: scheduleForm.contactName,
-      contact_phone: scheduleForm.contactPhone,
-      event_date: scheduleForm.date,
-      start_time: to24Hour(scheduleForm.startTime),
-      end_time: to24Hour(scheduleForm.endTime),
-      location: scheduleForm.location,
-      guest_count: Number(scheduleForm.attendees),
-      notes: scheduleForm.notes,
-      items: selectedItemsData,
-    };
+    const totalPrice = selectedItemsData.reduce(
+      (sum, item) => sum + (item.unit_price * item.quantity),
+      0
+    );
 
-    try {
-      await createCateringEvent(newEvent);
+    const downPayment = totalPrice * 0.5; // 50% payment
 
-      setCateringEvents(prev => [...prev, newEvent]);
-      Alert.alert("Success", "Catering event scheduled!");
-      setModalVisible(false);
+    // Ask for down payment confirmation
+    Alert.alert(
+      "Down Payment Required",
+      `You need to pay 50% of the total price (₱${downPayment.toLocaleString()}) to schedule this event. Confirm payment?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Pay Now",
+          onPress: async () => {
+            try {
+              const newEvent = {
+                id: Date.now(),
+                name: scheduleForm.eventName,
+                client_name: scheduleForm.client,
+                contact_name: scheduleForm.contactName,
+                contact_phone: scheduleForm.contactPhone,
+                event_date: scheduleForm.date,
+                start_time: to24Hour(scheduleForm.startTime),
+                end_time: to24Hour(scheduleForm.endTime),
+                location: scheduleForm.location,
+                guest_count: Number(scheduleForm.attendees),
+                notes: scheduleForm.notes,
+                items: selectedItemsData,
+                total_price: totalPrice,
+                paid_amount: downPayment,
+              };
 
-      // Reset form
-      setScheduleForm(prev => ({
-        ...prev,
-        eventName: "",
-        date: "",
-        startTime: "",
-        endTime: "",
-        location: "",
-        attendees: "",
-        contactName: "",
-        contactPhone: "",
-        notes: "",
-        selectedItems: [],
-      }));
-    } catch (err) {
-      console.error(err);
-      Alert.alert("Error", "Failed to schedule event.");
-    }
+              await createCateringEvent(newEvent);
+              setCateringEvents(prev => [...prev, newEvent]);
+
+              Alert.alert("Success", "Event scheduled! 50% payment received.");
+              setModalVisible(false);
+
+              // Reset form
+              setScheduleForm(prev => ({
+                ...prev,
+                eventName: "",
+                date: "",
+                startTime: "",
+                endTime: "",
+                location: "",
+                attendees: "",
+                contactName: "",
+                contactPhone: "",
+                notes: "",
+                selectedItems: [],
+              }));
+            } catch (err) {
+              console.error(err);
+              Alert.alert("Error", "Failed to schedule event.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  /* ------------------ Pay Remaining 50% ------------------ */
+  const handlePayRemaining = (event) => {
+    const remaining = event.total_price - (event.paid_amount || 0);
+    if (remaining <= 0) return;
+
+    Alert.alert(
+      "Pay Remaining 50%",
+      `Remaining payment: ₱${remaining.toLocaleString()}. Proceed to pay?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Pay Now",
+          onPress: async () => {
+            try {
+              // Here you would integrate real payment API
+              // For now we simulate payment success
+              await updateCateringEventPayment(event.id, remaining);
+
+              // Update state
+              setCateringEvents(prev =>
+                prev.map(ev =>
+                  ev.id === event.id
+                    ? { ...ev, paid_amount: ev.total_price, status: "Confirmed" }
+                    : ev
+                )
+              );
+
+              Alert.alert("Success", "Full payment received! Event confirmed.");
+            } catch (err) {
+              console.error(err);
+              Alert.alert("Error", "Payment failed.");
+            }
+          }
+        }
+      ]
+    );
   };
 
   /* ------------------ Loading / Access ------------------ */
@@ -273,22 +337,65 @@ export default function CateringTab({ navigation }) {
         {displayedEvents.map(event => (
           <View key={event.id} style={styles.eventCard}>
             <Text style={styles.eventTitle}>{event.name}</Text>
+
+            {/* STATUS */}
+            <Text
+              style={[
+                styles.statusText,
+                event.status === "Confirmed" ? styles.statusConfirmed :
+                event.status === "Pending Payment" ? styles.statusPending : styles.statusAccepted
+              ]}
+            >
+              📌 Status: {event.status}
+            </Text>
+
             <Text style={styles.highlightedText}>📅 Date: {event.event_date}</Text>
             <Text style={styles.highlightedText}>⏰ Time: {event.start_time} - {event.end_time}</Text>
             <Text style={styles.highlightedText}>📍 Location: {event.location}</Text>
             <Text style={styles.highlightedText}>👥 Attendees: {event.guest_count}</Text>
-            <Text style={styles.highlightedText}>👤 Client: {event.client_name}</Text>
+
+            {/* TOTAL PRICE */}
+            <Text style={[styles.highlightedText, { marginTop: 4, fontSize: 16 }]}>
+              💰 Total Price: ₱ {event.total_price?.toLocaleString() || 0} 
+              {event.status === "Pending Payment" && ` (Paid: ₱${event.paid_amount?.toLocaleString() || 0})`}
+            </Text>
+
             {event.notes && <Text style={styles.highlightedText}>📝 Notes: {event.notes}</Text>}
 
             <Text style={{ marginTop: 6, fontWeight: "700" }}>🍽 Menu Items:</Text>
             <View style={styles.menuGrid}>
               {event.items?.map((item, idx) => (
                 <View key={idx} style={styles.menuCard}>
-                  {item.image ? <Image source={item.image} style={styles.menuImage} /> : <View style={styles.menuImagePlaceholder} />}
-                  <Text style={styles.menuCardText}>{item.name} x {item.quantity}</Text>
+                  {item.image ? (
+                    <Image source={{ uri: item.image }} style={styles.menuImage} />
+                  ) : (
+                    <View style={styles.menuImagePlaceholder} />
+                  )}
+                  <Text style={styles.menuCardText}>
+                    {item.name} x {item.quantity} — ₱{(item.unit_price * item.quantity).toLocaleString()}
+                  </Text>
                 </View>
               ))}
             </View>
+
+            {/* Pay Remaining Button */}
+            {event.status === "Pending Payment" && (
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#f97316",
+                  padding: 8,
+                  borderRadius: 8,
+                  marginTop: 8,
+                  alignItems: "center"
+                }}
+                onPress={() => handlePayRemaining(event)}
+              >
+                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                  Pay Remaining 50%
+                </Text>
+              </TouchableOpacity>
+            )}
+
           </View>
         ))}
 
@@ -364,7 +471,7 @@ export default function CateringTab({ navigation }) {
                   return (
                     <View key={item.id} style={[styles.menuCard, selected && styles.menuCardSelected]}>
                       <TouchableOpacity onPress={() => toggleMenuItem(item.id)}>
-                        {item.image ? <Image source={item.image} style={styles.menuImage} /> : <View style={styles.menuImagePlaceholder} />}
+                        {item.image ? <Image source={{ uri: item.image }} style={styles.menuImage} /> : <View style={styles.menuImagePlaceholder} />}
                         <Text style={[styles.menuCardText, selected && styles.menuCardTextSelected]}>{item.name}</Text>
                       </TouchableOpacity>
                       {selected && (
@@ -452,4 +559,8 @@ const styles = StyleSheet.create({
   eventCard: { backgroundColor: "#fff", padding: 14, borderRadius: 12, marginBottom: 14, borderWidth: 1, borderColor: "#f0f0f0" },
   eventTitle: { fontSize: 18, fontWeight: "700", marginBottom: 6 },
   highlightedText: { fontWeight: "600", marginBottom: 2 },
+  statusText: { fontWeight: "700", fontSize: 15, marginBottom: 6 },
+  statusPending: { color: "#f39c12" },
+  statusAccepted: { color: "#3498db" },
+  statusConfirmed: { color: "#27ae60" },
 });

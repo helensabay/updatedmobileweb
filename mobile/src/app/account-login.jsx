@@ -206,20 +206,25 @@ const handleLogin = async () => {
     }
   }, [promptAsync, request, router]);
 
-  // ✅ Guest login handler
 const handleGuestEntry = useCallback(async () => {
   if (guestLoading) return;
   setGuestLoading(true);
 
   try {
     const data = await getGuestToken();
-    console.log('Guest data received:', data); // 🔍 Debug
+    console.log('Guest data received:', data);
 
     if (!data.access) throw new Error('No access token returned by backend');
+
+    await storeTokens({
+      accessToken: data.access,
+      refreshToken: data.refresh,
+    });
 
     Alert.alert('Guest Access', 'You are browsing as a guest user.', [
       { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
     ]);
+
   } catch (error) {
     console.error('Guest login frontend error:', error);
     Alert.alert('Guest Login Failed', error.message || 'Cannot login as guest.');
@@ -228,7 +233,7 @@ const handleGuestEntry = useCallback(async () => {
   }
 }, [guestLoading, router]);
 
-  // ✅ Load fonts
+
   const [fontsLoaded] = useFonts({
     Roboto_400Regular,
     Roboto_700Bold,

@@ -806,22 +806,38 @@ export const fetchCateringEvents = async (clientName) => {
     const token = await getValidToken();
     if (!token) throw new Error('No valid token. Please log in again.');
 
-    // Call the backend endpoint for this user
-    const res = await api.get(`/catering-events/user-events/${encodeURIComponent(clientName)}/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await api.get(
+      `/catering-events/user-events/${encodeURIComponent(clientName)}/`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-    if (Array.isArray(res.data)) return res.data;
+    let events = [];
 
-    // Optional: if backend wraps it like { events: [...] }
-    if (res.data.events) return res.data.events;
+    if (Array.isArray(res.data)) events = res.data;
+    else if (res.data.events) events = res.data.events;
+    else return [];
 
-    return [];
+    // 🔥 Compute total price per event
+    const updatedEvents = events.map(event => ({
+      ...event,
+      total_price:
+        Array.isArray(event.items)
+          ? event.items.reduce(
+              (sum, item) =>
+                sum + ((item.unit_price || item.price || 0) * (item.quantity || 0)),
+              0
+            )
+          : 0,
+    }));
+
+    return updatedEvents;
+
   } catch (err) {
     console.error('fetchCateringEvents error:', err.response?.data || err.message);
     return [];
   }
 };
+
 
 
 export default api; 

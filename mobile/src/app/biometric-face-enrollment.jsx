@@ -41,15 +41,15 @@ export default function BiometricFaceEnrollmentScreen() {
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Scan your face to continue',
+        promptMessage: 'Scan your fingerprint to continue',
         fallbackLabel: 'Use Passcode',
       });
 
       if (result.success) {
-        Alert.alert('Success', 'Face verified successfully!');
+        Alert.alert('Success', 'verified successfully!');
         router.push('/(tabs)/home-dashboard'); // ✅ Navigate to main app
       } else {
-        Alert.alert('Failed', 'Face scan failed. Try again.');
+        Alert.alert('Failed', 'scan failed. Try again.');
       }
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -58,13 +58,13 @@ export default function BiometricFaceEnrollmentScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Face Scan</Text>
+      <Text style={styles.title}>Fingerprint Scan</Text>
       <Text style={styles.subtitle}>
-        Scan your face to verify your identity
+        Scan Fingerprint to verify your identity
       </Text>
 
       <TouchableOpacity style={styles.button} onPress={handleFaceScan}>
-        <Text style={styles.buttonText}>Start Face Scan</Text>
+        <Text style={styles.buttonText}>Start Finger Scan</Text>
       </TouchableOpacity>
 
       <TouchableOpacity

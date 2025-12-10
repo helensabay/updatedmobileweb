@@ -85,7 +85,7 @@ export default function OrderTrackingScreen() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
               });
-              await loadOrders(); // Refresh lists after cancel
+              await loadOrders();
               closeDetailModal();
               Alert.alert("Success", "Order canceled successfully!");
             } catch (err) {
@@ -96,29 +96,6 @@ export default function OrderTrackingScreen() {
         },
       ]
     );
-  };
-
-  // Reorder
-  const reorderItems = async (items) => {
-    if (!Array.isArray(items) || items.length === 0) return;
-    try {
-      await Promise.all(
-        items.map((item) =>
-          fetch(`${BACKEND}/cart/add/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              item_id: item.id,
-              quantity: item.quantity ?? 1,
-            }),
-          })
-        )
-      );
-      Alert.alert("Success", "Items added back to your cart!");
-    } catch (err) {
-      console.error("Reorder failed:", err);
-      Alert.alert("Error", "Unable to reorder items.");
-    }
   };
 
   if (!panResponderRef.current) {
@@ -148,6 +125,7 @@ export default function OrderTrackingScreen() {
   }
 
   const openDetailModal = (order) => {
+    console.log('Selected Order:', order); // Debugging
     setSelectedOrder(order);
     setModalVisible(true);
   };
@@ -445,14 +423,16 @@ export default function OrderTrackingScreen() {
                   <View style={styles.modalRow}>
                     <Text style={styles.modalLabel}>Payment</Text>
                     <Text style={styles.modalValue}>
-                      {selectedOrder.payment_method || 'N/A'}
+                      {selectedOrder.payment_method || selectedOrder.payment || 'N/A'}
                     </Text>
                   </View>
 
                   <View style={styles.modalRow}>
                     <Text style={styles.modalLabel}>Order Date</Text>
                     <Text style={styles.modalValue}>
-                      {selectedOrder.created_at ? new Date(selectedOrder.created_at).toLocaleString() : 'N/A'}
+                      {selectedOrder.created_at || selectedOrder.order_date
+                        ? new Date(selectedOrder.created_at || selectedOrder.order_date).toLocaleString()
+                        : 'N/A'}
                     </Text>
                   </View>
 
@@ -473,17 +453,16 @@ export default function OrderTrackingScreen() {
 
                   {/* --- BUTTONS --- */}
                   <View style={styles.buttonRow}>
-                    {selectedOrder.status.toLowerCase() !== 'completed' &&
-                     selectedOrder.status.toLowerCase() !== 'cancelled' && (
-                      <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: '#d9534f' }]}
-                        onPress={() => cancelOrder(selectedOrder.order_number)}
-                      >
-                        <Text style={styles.actionButtonText}>Cancel Order</Text>
-                      </TouchableOpacity>
-                    )}
-
-                  
+                    {/* Cancel Order button */}
+                    {selectedOrder.status &&
+                      !['completed', 'cancelled'].includes(selectedOrder.status.toLowerCase()) && (
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: '#d9534f' }]}
+                          onPress={() => cancelOrder(selectedOrder.order_number)}
+                        >
+                          <Text style={styles.actionButtonText}>Cancel Order</Text>
+                        </TouchableOpacity>
+                      )}
                   </View>
                 </>
               ) : (

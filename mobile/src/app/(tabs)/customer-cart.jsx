@@ -23,15 +23,19 @@ import api, { getValidToken, createOrder } from '../../api/api';
 
 export default function CustomerCartScreen() {
   const router = useRouter();
-  const { cart, removeFromCart, increaseQuantity, decreaseQuantity } = useCart();
+  const { cart, removeFromCart, increaseQuantity, decreaseQuantity, clearCart } = useCart();
 
   const [selectedTime, setSelectedTime] = useState(null);
   const [loading, setLoading] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [orderStatus, setOrderStatus] = useState(null);
+
+  const pickupTimes = [
+    '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM',
+    '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM'
+  ];
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
-
-  const [orderStatus, setOrderStatus] = useState(null); // live status
 
   const total = cart.reduce((sum, item) => {
     const price = Number(item.price) || 0;
@@ -41,11 +45,29 @@ export default function CustomerCartScreen() {
 
   const finalTotal = total;
 
-  const pickupTimes = ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM'];
+  // 🔹 DISABLE TIME FUNCTION HERE
+  const isTimeDisabled = (time) => {
+    const [hour, minutePart] = time.split(':');
+    let [minute, ampm] = minutePart.split(' ');
+    let hour24 = parseInt(hour, 10);
 
-  // ------------------------------
-  // FETCH USER
-  // ------------------------------
+    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+
+    // RULE 1: Disable pickup between 9 PM and 4 AM
+    if (hour24 >= 21 || hour24 < 4) {
+      return true;
+    }
+
+    // RULE 2: Disable if time already passed today
+    const now = new Date();
+    const slotTime = new Date(now);
+    slotTime.setHours(hour24, parseInt(minute), 0, 0);
+
+    return slotTime <= now;
+  };
+
+  // ------------------------------ FETCH USER
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -65,9 +87,7 @@ export default function CustomerCartScreen() {
     fetchUserData();
   }, []);
 
-  // ------------------------------
-  // HANDLE ORDER
-  // ------------------------------
+  // ------------------------------ HANDLE ORDER
   const handleProceed = () => {
     if (!customerName) {
       Alert.alert('User not loaded', 'Please log in first.');
@@ -78,86 +98,92 @@ export default function CustomerCartScreen() {
       return;
     }
     if (cart.length === 0) {
-      Alert.alert('Cart is empty', 'Please add items to your cart.');
+      Alert.alert('Cart is empty', 'Please add items.');
       return;
     }
     goToPayment();
   };
 
   const goToPayment = async () => {
-    setLoading(true);
-    try {
-      const token = await getValidToken();
-      if (!token) throw new Error('No valid token found.');
+  setLoading(true);
+  try {
+    // Get valid token
+    const token = await getValidToken();
+    if (!token) throw new Error('No valid token found.');
 
-      // Convert selectedTime to ISO
-      const [hour, minutePart] = selectedTime.split(':');
-      let [minute, ampm] = minutePart.split(' ');
-      let hour24 = parseInt(hour, 10);
-      if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-      if (ampm === 'AM' && hour24 === 12) hour24 = 0;
-      const now = new Date();
-      const pickupDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        hour24,
-        parseInt(minute, 10),
-        0
-      );
+    // Convert selectedTime to a proper Date object
+    const [hour, minutePart] = selectedTime.split(':');
+    let [minute, ampm] = minutePart.split(' ');
+    let hour24 = parseInt(hour, 10);
+    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+    const now = new Date();
+    const pickupDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      hour24,
+      parseInt(minute),
+      0
+    );
 
-      // Calculate subtotal
-      const subtotal = cart.reduce(
-        (sum, item) => sum + parseFloat(item.price) * Number(item.quantity),
-        0
-      );
+    // Calculate subtotal
+    const subtotal = cart.reduce(
+      (sum, item) => sum + parseFloat(item.price) * Number(item.quantity),
+      0
+    );
 
-      const payload = {
-        customer_name: customerName,
-        order_type: 'pickup',
-        subtotal: subtotal,
-        total_amount: finalTotal,
-        payment_method: 'pending',
-        promised_time: pickupDate.toISOString(),
-        items: cart.map((item) => ({
-          menu_item_id: item.id,
-          name: item.name,
-          price: parseFloat(item.price),
-          quantity: Number(item.quantity),
-          size: item.size || null,
-          customize: item.customize || null,
-        })),
-      };
+    // Prepare order payload
+    const payload = {
+      customer_name: customerName,
+      order_type: 'pickup',
+      subtotal,
+      total_amount: finalTotal,
+      payment_method: 'pending',
+      promised_time: pickupDate.toISOString(),
+      items: cart.map((item) => ({
+        menu_item_id: item.id,
+        name: item.name,
+        price: parseFloat(item.price),
+        quantity: Number(item.quantity),
+        size: item.size || null,
+        customize: item.customize || null,
+      })),
+    };
 
-      const res = await createOrder(payload);
-      if (!res.success) {
-        Alert.alert('Order Error', res.message || 'Failed to create order');
-        setLoading(false);
-        return;
-      }
-
-      setOrderStatus('pending');
-
-      router.push({
-        pathname: '/cart/payment',
-        params: {
-          orderType: 'pickup',
-          total: finalTotal.toFixed(2),
-          selectedTime,
-          orderId: res.order_number,
-        },
-      });
-    } catch (err) {
-      console.error('Create Order Error:', err);
-      Alert.alert('Order Error', err.message || 'Unable to create order. Please try again.');
-    } finally {
+    // Create order
+    const res = await createOrder(payload);
+    if (!res.success) {
+      Alert.alert('Order Error', res.message || 'Failed to create order');
       setLoading(false);
+      return;
     }
-  };
 
-  // ------------------------------
-  // STATUS TRACKER
-  // ------------------------------
+    // ✅ Clear cart and reset states
+    clearCart();
+    setSelectedTime(null);
+    setOrderStatus(null);
+
+    // Navigate to payment page
+    router.push({
+      pathname: '/cart/payment',
+      params: {
+        orderType: 'pickup',
+        total: finalTotal.toFixed(2),
+        selectedTime,
+        orderId: res.order_number,
+      },
+    });
+  } catch (err) {
+    console.error('Create Order Error:', err);
+    Alert.alert('Order Error', err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  // 🔹 STATUS TRACKING
   const statusSteps = ['pending', 'in_prep', 'in_progress', 'ready', 'completed'];
 
   const renderStatusTracker = () => {
@@ -169,18 +195,11 @@ export default function CustomerCartScreen() {
           const active = statusSteps.indexOf(orderStatus) >= index;
           return (
             <View key={step} style={styles.statusStep}>
-              <View
-                style={[
-                  styles.statusCircle,
-                  { backgroundColor: active ? '#27ae60' : '#ccc' },
-                ]}
-              />
+              <View style={[styles.statusCircle, { backgroundColor: active ? '#27ae60' : '#ccc' }]} />
               <Text style={[styles.statusText, { color: active ? '#27ae60' : '#999' }]}>
                 {step.replace('_', ' ').toUpperCase()}
               </Text>
-              {index < statusSteps.length - 1 && (
-                <View style={[styles.statusLine, { backgroundColor: active ? '#27ae60' : '#ccc' }]} />
-              )}
+              {index < statusSteps.length - 1 && <View style={[styles.statusLine, { backgroundColor: active ? '#27ae60' : '#ccc' }]} />}
             </View>
           );
         })}
@@ -188,9 +207,6 @@ export default function CustomerCartScreen() {
     );
   };
 
-  // ------------------------------
-  // CART ITEM RENDER
-  // ------------------------------
   const renderItem = ({ item }) => (
     <View style={styles.card}>
       <Image source={item.image} style={styles.image} />
@@ -222,25 +238,31 @@ export default function CustomerCartScreen() {
       <View style={styles.pickupContainer}>
         <Text style={styles.pickupLabel}>Select Pickup Time:</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {pickupTimes.map((time) => (
-            <TouchableOpacity
-              key={time}
-              style={[
-                styles.pickupTimeBtn,
-                selectedTime === time && styles.pickupTimeSelected,
-              ]}
-              onPress={() => setSelectedTime(time)}
-            >
-              <Text
+          {pickupTimes.map((time) => {
+            const disabled = isTimeDisabled(time);
+            return (
+              <TouchableOpacity
+                key={time}
+                disabled={disabled}
                 style={[
-                  styles.pickupTimeText,
-                  selectedTime === time && { color: '#fff', fontFamily: 'Roboto_700Bold' },
+                  styles.pickupTimeBtn,
+                  selectedTime === time && styles.pickupTimeSelected,
+                  disabled && { opacity: 0.4 }
                 ]}
+                onPress={() => setSelectedTime(time)}
               >
-                {time}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.pickupTimeText,
+                    selectedTime === time && { color: '#fff', fontFamily: 'Roboto_700Bold' },
+                    disabled && { color: '#777' }
+                  ]}
+                >
+                  {time}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -300,9 +322,7 @@ export default function CustomerCartScreen() {
   );
 }
 
-// ------------------------------
-// STYLES
-// ------------------------------
+// ------------------------------ STYLES
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fdfdfd' },
   headerBackground: { width: '100%', borderBottomLeftRadius: 20, borderBottomRightRadius: 20, overflow: 'hidden', paddingBottom: 8 },

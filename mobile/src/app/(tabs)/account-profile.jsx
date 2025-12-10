@@ -38,35 +38,50 @@ export default function AccountProfile() {
   const safeString = val => (val != null ? String(val) : 'N/A');
 
   // --- Load user profile & credit points ---
-  const loadProfile = useCallback(async () => {
+const loadProfile = useCallback(async () => {
+  setLoading(true);
+  try {
+    const userData = await AsyncStorage.getItem('@sanaol/auth/user');
+    if (!userData) {
+      setProfile(null);
+      setCreditPoints(0);
+      return;
+    }
+
+    const parsed = JSON.parse(userData);
+    setProfile(parsed);
+
+    const token = await getValidToken();
+    if (!token) throw new Error('No access token');
+
+    let points = 0;
+
     try {
-      setLoading(true);
-      const userData = await AsyncStorage.getItem('@sanaol/auth/user');
-      if (!userData) {
-        setProfile(null);
-        setCreditPoints(0);
-        return;
-      }
-      const parsed = JSON.parse(userData);
-      setProfile(parsed);
-
-      const token = await getValidToken();
-      if (!token) throw new Error('No access token');
-
       const res = await api.get('/orders/user-credit-points/', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setCreditPoints(res.data.credit_points ?? 0);
 
-    } catch (err) {
-      console.error('loadProfile error:', err.response?.data || err.message);
-      Alert.alert('Error', 'Failed to load profile or credit points.');
-      setProfile(null);
-      setCreditPoints(0);
-    } finally {
-      setLoading(false);
+      // ✅ Only use credit_points if response is an object and has the field
+      if (res.data && typeof res.data === 'object' && 'credit_points' in res.data) {
+        points = res.data.credit_points ?? 0;
+      }
+    } catch (apiErr) {
+      // If API fails or returns HTML, fallback to 0
+      console.warn('Failed to fetch credit points, defaulting to 0', apiErr);
+      points = 0;
     }
-  }, []);
+
+    setCreditPoints(points);
+
+  } catch (err) {
+    console.error('loadProfile outer error:', err);
+    setProfile(prev => prev ?? null);
+    setCreditPoints(0);
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
 
   // --- Load special offers ---
   const loadSpecialOffers = useCallback(async () => {
@@ -117,33 +132,46 @@ export default function AccountProfile() {
     ]);
   };
 
-  // --- Redeem offer ---
-  const redeemOffer = async (offer) => {
-    try {
-      const token = await getValidToken();
-      if (!token) throw new Error('No access token');
+// --- Redeem offer ---
+const redeemOffer = async (offer) => {
+  const points = Number(creditPoints) || 0; // ensure it's a number
 
-      const res = await api.post(
-        '/orders/redeem-offer/',
-        { offer_id: offer.id, points_used: offer.points },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+  if (points < offer.points) {
+    Alert.alert(
+      'Not enough points',
+      `You need ${offer.points} points to redeem this offer, but you only have ${points.toFixed(2)} points.`
+    );
+    return; // Exit early
+  }
 
-      setCreditPoints(res.data.remaining_points ?? creditPoints);
-      clearCart();
-      Alert.alert('Success', `You redeemed ${offer.name} for ${offer.points} points!`);
-      setCreditModal(false);
+  try {
+    const token = await getValidToken();
+    if (!token) throw new Error('No access token');
 
-    } catch (err) {
-      console.error('redeemOffer error:', err.response?.data || err.message);
-      const message =
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
-        err.message ||
-        'Failed to redeem the offer.';
-      Alert.alert('Error', message);
-    }
-  };
+    const res = await api.post(
+      '/orders/redeem-offer/',
+      { offer_id: offer.id, points_used: offer.points },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    setCreditPoints(res.data.remaining_points ?? points);
+    clearCart();
+    Alert.alert('Success', `You redeemed ${offer.name} for ${offer.points} points!`);
+    setCreditModal(false);
+
+  } catch (err) {
+    console.error('redeemOffer error:', err.response?.data || err.message);
+
+    const message =
+      err.response?.data?.detail ||
+      err.response?.data?.message ||
+      err.message ||
+      'Failed to redeem the offer.';
+
+    Alert.alert('Error', message);
+  }
+};
+
 
   // --- Pick avatar ---
   const pickAvatar = async () => {
