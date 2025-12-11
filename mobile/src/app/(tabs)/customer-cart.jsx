@@ -31,49 +31,24 @@ export default function CustomerCartScreen() {
   const [orderStatus, setOrderStatus] = useState(null);
 
   const pickupTimes = [
-    '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM',
-    '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM'
+    '10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM','8:00 PM','9:00 PM'
   ];
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
 
-  const total = cart.reduce((sum, item) => {
-    const price = Number(item.price) || 0;
-    const qty = Number(item.quantity) || 0;
-    return sum + price * qty;
-  }, 0);
+  const total = cart.reduce(
+    (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+    0
+  );
 
   const finalTotal = total;
 
-  // 🔹 DISABLE TIME FUNCTION HERE
-  const isTimeDisabled = (time) => {
-    const [hour, minutePart] = time.split(':');
-    let [minute, ampm] = minutePart.split(' ');
-    let hour24 = parseInt(hour, 10);
-
-    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
-
-    // RULE 1: Disable pickup between 9 PM and 4 AM
-    if (hour24 >= 21 || hour24 < 4) {
-      return true;
-    }
-
-    // RULE 2: Disable if time already passed today
-    const now = new Date();
-    const slotTime = new Date(now);
-    slotTime.setHours(hour24, parseInt(minute), 0, 0);
-
-    return slotTime <= now;
-  };
-
-  // ------------------------------ FETCH USER
+  // ------------------------------ FETCH USER DATA
   useEffect(() => {
     const fetchUserData = async () => {
       try {
         const token = await getValidToken();
         if (!token) throw new Error('No valid token found.');
-
         const userRes = await api.get('/accounts/profile/', {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -86,6 +61,22 @@ export default function CustomerCartScreen() {
     };
     fetchUserData();
   }, []);
+
+  // ------------------------------ DISABLE TIME FUNCTION
+  const isTimeDisabled = (time) => {
+    const [hour, minutePart] = time.split(':');
+    let [minute, ampm] = minutePart.split(' ');
+    let hour24 = parseInt(hour, 10);
+    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+
+    const now = new Date();
+    const slotTime = new Date(now);
+    slotTime.setHours(hour24, parseInt(minute), 0, 0);
+
+    if (hour24 >= 21 || hour24 < 4) return true; // Rule: disable 9 PM to 4 AM
+    return slotTime <= now; // Disable past times
+  };
 
   // ------------------------------ HANDLE ORDER
   const handleProceed = () => {
@@ -105,90 +96,82 @@ export default function CustomerCartScreen() {
   };
 
   const goToPayment = async () => {
-  setLoading(true);
-  try {
-    // Get valid token
-    const token = await getValidToken();
-    if (!token) throw new Error('No valid token found.');
+    setLoading(true);
+    try {
+      const token = await getValidToken();
+      if (!token) throw new Error('No valid token found.');
 
-    // Convert selectedTime to a proper Date object
-    const [hour, minutePart] = selectedTime.split(':');
-    let [minute, ampm] = minutePart.split(' ');
-    let hour24 = parseInt(hour, 10);
-    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
-    const now = new Date();
-    const pickupDate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      hour24,
-      parseInt(minute),
-      0
-    );
+      const [hour, minutePart] = selectedTime.split(':');
+      let [minute, ampm] = minutePart.split(' ');
+      let hour24 = parseInt(hour, 10);
+      if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+      if (ampm === 'AM' && hour24 === 12) hour24 = 0;
 
-    // Calculate subtotal
-    const subtotal = cart.reduce(
-      (sum, item) => sum + parseFloat(item.price) * Number(item.quantity),
-      0
-    );
+      const now = new Date();
+      const pickupDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        hour24,
+        parseInt(minute),
+        0
+      );
 
-    // Prepare order payload
-    const payload = {
-      customer_name: customerName,
-      order_type: 'pickup',
-      subtotal,
-      total_amount: finalTotal,
-      payment_method: 'pending',
-      promised_time: pickupDate.toISOString(),
-      items: cart.map((item) => ({
-        menu_item_id: item.id,
-        name: item.name,
-        price: parseFloat(item.price),
-        quantity: Number(item.quantity),
-        size: item.size || null,
-        customize: item.customize || null,
-      })),
-    };
+      const subtotal = cart.reduce(
+        (sum, item) => sum + parseFloat(item.price) * Number(item.quantity),
+        0
+      );
 
-    // Create order
-    const res = await createOrder(payload);
-    if (!res.success) {
-      Alert.alert('Order Error', res.message || 'Failed to create order');
+      const payload = {
+        customer_name: customerName,
+        order_type: 'pickup',
+        subtotal,
+        total_amount: finalTotal,
+        payment_method: 'pending',
+        promised_time: pickupDate.toISOString(),
+        items: cart.map((item) => ({
+          menu_item_id: item.id,
+          name: item.name,
+          price: parseFloat(item.price),
+          quantity: Number(item.quantity),
+          size: item.size || null,
+          customize: item.customize || null,
+        })),
+      };
+
+      const res = await createOrder(payload);
+      if (!res.success) {
+        Alert.alert('Order Error', res.message || 'Failed to create order');
+        setLoading(false);
+        return;
+      }
+
+      clearCart();
+      setSelectedTime(null);
+      setOrderStatus(null);
+
+      router.push({
+        pathname: '/cart/payment',
+        params: {
+          orderType: 'pickup',
+          total: finalTotal.toFixed(2),
+          selectedTime,
+          orderId: res.order_number,
+        },
+      });
+    } catch (err) {
+      console.error('Create Order Error:', err);
+      Alert.alert('Order Error', err.message);
+    } finally {
       setLoading(false);
-      return;
     }
+  };
 
-    // ✅ Clear cart and reset states
-    clearCart();
-    setSelectedTime(null);
-    setOrderStatus(null);
-
-    // Navigate to payment page
-    router.push({
-      pathname: '/cart/payment',
-      params: {
-        orderType: 'pickup',
-        total: finalTotal.toFixed(2),
-        selectedTime,
-        orderId: res.order_number,
-      },
-    });
-  } catch (err) {
-    console.error('Create Order Error:', err);
-    Alert.alert('Order Error', err.message);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-  // 🔹 STATUS TRACKING
+  // ------------------------------ STATUS TRACKING
   const statusSteps = ['pending', 'in_prep', 'in_progress', 'ready', 'completed'];
 
   const renderStatusTracker = () => {
     if (!orderStatus) return null;
-
     return (
       <View style={styles.statusContainer}>
         {statusSteps.map((step, index) => {

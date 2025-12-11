@@ -185,7 +185,32 @@ const formatCountdown = (seconds) => {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 };
 
-const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
+const OrderQueue = ({ orderQueue, updateOrderStatus: propUpdateOrderStatus, updateOrderAutoFlow }) => {
+const updateOrderStatus =
+  propUpdateOrderStatus ||
+  (async (orderId, newStatus) => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Failed to update status:', errorData);
+        toast.error('Error updating order status. Check console.');
+        return;
+      }
+      const data = await response.json();
+      console.log('Order updated:', data);
+      toast.success(`Order status updated to ${newStatus}`);
+    } catch (err) {
+      console.error('Network error:', err);
+      toast.error('Network error. Try again.');
+    }
+  });
+
   const { can } = useAuth();
   const queueOrders = useMemo(() => {
     if (!orderQueue) return [];

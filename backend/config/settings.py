@@ -108,6 +108,11 @@ SITE_ID = 1
 
 TIME_ZONE = "Asia/Manila"
 USE_TZ = True
+# settings.py
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+]
 
 # CORS
 CORS_ALLOWED_ORIGINS, CORS_ALLOW_HEADERS = get_cors()

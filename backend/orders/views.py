@@ -3,6 +3,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from decimal import Decimal, ROUND_DOWN
 from .utils import map_order_status  # if you put it in utils.py
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 
 from rest_framework import status
 from api.models import Order, OrderItem
@@ -495,3 +497,25 @@ def list_special_offers(request):
     } for offer in offers]
 
     return Response({"success": True, "offers": data})
+
+
+@api_view(['GET', 'PATCH'])
+@authentication_classes([SessionAuthentication, BasicAuthentication])  # no JWT
+@permission_classes([AllowAny])
+def update_order_status(request, order_id):
+    order = get_object_or_404(Order, id=order_id)
+
+    if request.method == 'GET':
+        return Response({'status': order.status})
+
+    new_status = request.data.get('status')
+    if not new_status:
+        return Response({'error': 'Missing status'}, status=status.HTTP_400_BAD_REQUEST)
+
+    valid_statuses = [choice[0] for choice in Order.STATUS_CHOICES]
+    if new_status not in valid_statuses:
+        return Response({'error': f'Invalid status: {new_status}'}, status=status.HTTP_400_BAD_REQUEST)
+
+    order.status = new_status
+    order.save()
+    return Response({'status': order.status})
